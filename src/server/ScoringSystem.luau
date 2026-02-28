@@ -28,13 +28,8 @@ local function getRemote(name: string): RemoteEvent
 	return ReplicatedStorage:WaitForChild(name) :: RemoteEvent
 end
 
--- Par times per difficulty (in seconds)
-local PAR_TIMES = {
-	[1] = 180, -- 3 minutes
-	[2] = 300, -- 5 minutes
-	[3] = 420, -- 7 minutes
-	[4] = 600, -- 10 minutes
-}
+-- Par times from shared config
+local PAR_TIMES = GameConfig.PAR_TIMES
 
 function ScoringSystem.calculateScore(
 	caseData: CaseData,
@@ -87,6 +82,9 @@ function ScoringSystem.calculateScore(
 	local subtotal = (investigationXP + raidDifficultyBonus + nonLethalBonus + speedBonus - collateralPenalty)
 	local totalXP = math.max(0, math.floor(subtotal * caseScoreMultiplier))
 
+	-- Max possible XP: tier 4 multiplier (1.8) * all bonuses (non-lethal 1.2 + speed 0.10 ≈ 1.5)
+	local maxPossibleXP = math.floor(caseData.xpReward * 1.8 * 1.5)
+
 	local result: ScoringResult = {
 		investigationXP = math.floor(investigationXP),
 		raidDifficultyBonus = math.floor(raidDifficultyBonus),
@@ -95,6 +93,7 @@ function ScoringSystem.calculateScore(
 		speedBonus = math.floor(speedBonus),
 		collateralPenalty = math.floor(collateralPenalty),
 		totalXP = totalXP,
+		maxPossibleXP = maxPossibleXP,
 	}
 
 	return result
@@ -109,6 +108,7 @@ function ScoringSystem.presentScore(player: Player, result: ScoringResult)
 		speedBonus = result.speedBonus,
 		collateralPenalty = result.collateralPenalty,
 		totalXP = result.totalXP,
+		maxPossibleXP = result.maxPossibleXP,
 	})
 
 	print("[ScoringSystem] Score for", player.Name, "| Total XP:", result.totalXP)

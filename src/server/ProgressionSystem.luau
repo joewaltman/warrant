@@ -12,6 +12,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 type PlayerRank = Types.PlayerRank
 type SyndicateStats = Types.SyndicateStats
 type DetectivePvpStats = Types.DetectivePvpStats
+type DetectiveStats = Types.DetectiveStats
 
 export type PlayerData = {
 	xp: number,
@@ -23,6 +24,8 @@ export type PlayerData = {
 	unlockedTitles: { string },
 	unlockedBadges: { string },
 	equippedTitle: string?,
+	detectiveStats: DetectiveStats,
+	tutorialStep: number,
 }
 
 local ProgressionSystem = {}
@@ -59,6 +62,16 @@ local function defaultPlayerData(): PlayerData
 		unlockedTitles = {},
 		unlockedBadges = {},
 		equippedTitle = nil,
+		detectiveStats = {
+			casesCompleted = 0,
+			totalEvidenceFound = 0,
+			perfectRaids = 0,
+			speedRecords = 0,
+			totalXPEarned = 0,
+			favoriteDistrict = "",
+			highestIntelTier = 0,
+		},
+		tutorialStep = 0,
 	}
 end
 
@@ -110,6 +123,8 @@ function ProgressionSystem.loadPlayer(player: Player)
 			unlockedTitles = loaded.unlockedTitles or defaults.unlockedTitles,
 			unlockedBadges = loaded.unlockedBadges or defaults.unlockedBadges,
 			equippedTitle = loaded.equippedTitle,
+			detectiveStats = loaded.detectiveStats or defaults.detectiveStats,
+			tutorialStep = loaded.tutorialStep or defaults.tutorialStep,
 		}
 
 		playerDataCache[player.UserId] = playerData

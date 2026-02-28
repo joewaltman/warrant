@@ -112,6 +112,56 @@ local INTEL_TIER_REVEALS: { IntelTierConfig } = table.freeze({
 	}),
 }) :: any
 
+local PAR_TIMES = table.freeze({
+	[1] = 180, -- 3 minutes
+	[2] = 300, -- 5 minutes
+	[3] = 420, -- 7 minutes
+	[4] = 600, -- 10 minutes
+})
+
+local SCORE_GRADES = table.freeze({
+	table.freeze({ letter = "S", minPct = 0.90, stars = 5 }),
+	table.freeze({ letter = "A", minPct = 0.75, stars = 4 }),
+	table.freeze({ letter = "B", minPct = 0.60, stars = 3 }),
+	table.freeze({ letter = "C", minPct = 0.40, stars = 2 }),
+	table.freeze({ letter = "D", minPct = 0.20, stars = 2 }),
+	table.freeze({ letter = "F", minPct = 0, stars = 1 }),
+}) :: any
+
+local DISTRICT_ORDER = table.freeze({
+	"Elm Heights",
+	"Dockside",
+	"Neon Strip",
+	"Old Town",
+	"Financial District",
+})
+
+local BADGE_DEFINITIONS: { Types.BadgeDefinition } = table.freeze({
+	table.freeze({ id = "first_case", name = "First Case", description = "Complete your first case", stat = "casesCompleted", threshold = 1 }),
+	table.freeze({ id = "detective", name = "Detective", description = "Complete 5 cases", stat = "casesCompleted", threshold = 5 }),
+	table.freeze({ id = "veteran_detective", name = "Veteran Detective", description = "Complete 15 cases", stat = "casesCompleted", threshold = 15 }),
+	table.freeze({ id = "sharpshooter", name = "Sharpshooter", description = "Complete 3 perfect raids", stat = "perfectRaids", threshold = 3 }),
+	table.freeze({ id = "pacifist", name = "Pacifist", description = "Complete 10 perfect raids", stat = "perfectRaids", threshold = 10 }),
+	table.freeze({ id = "evidence_hound", name = "Evidence Hound", description = "Find 50 total evidence", stat = "totalEvidenceFound", threshold = 50 }),
+	table.freeze({ id = "forensic_expert", name = "Forensic Expert", description = "Find 150 total evidence", stat = "totalEvidenceFound", threshold = 150 }),
+	table.freeze({ id = "speedster", name = "Speedster", description = "Beat par time 3 times", stat = "speedRecords", threshold = 3 }),
+	table.freeze({ id = "lightning", name = "Lightning", description = "Beat par time 10 times", stat = "speedRecords", threshold = 10 }),
+	table.freeze({ id = "xp_hoarder", name = "XP Hoarder", description = "Earn 5000 total XP", stat = "totalXPEarned", threshold = 5000 }),
+	table.freeze({ id = "xp_mogul", name = "XP Mogul", description = "Earn 25000 total XP", stat = "totalXPEarned", threshold = 25000 }),
+	table.freeze({ id = "airtight", name = "Airtight", description = "Reach Airtight intel tier", stat = "highestIntelTier", threshold = 4 }),
+}) :: any
+
+local TITLE_DEFINITIONS: { Types.TitleDefinition } = table.freeze({
+	table.freeze({ id = "rookie_cop", displayName = "Rookie Cop", description = "Complete your first case", stat = "casesCompleted", threshold = 1 }),
+	table.freeze({ id = "the_detective", displayName = "The Detective", description = "Complete 10 cases", stat = "casesCompleted", threshold = 10 }),
+	table.freeze({ id = "ghost", displayName = "Ghost", description = "Complete 5 perfect raids", stat = "perfectRaids", threshold = 5 }),
+	table.freeze({ id = "cowboy_cop", displayName = "Cowboy Cop", description = "Earn 10000 total XP", stat = "totalXPEarned", threshold = 10000 }),
+	table.freeze({ id = "speed_demon", displayName = "Speed Demon", description = "Beat par time 5 times", stat = "speedRecords", threshold = 5 }),
+	table.freeze({ id = "bloodhound", displayName = "Bloodhound", description = "Find 100 total evidence", stat = "totalEvidenceFound", threshold = 100 }),
+	table.freeze({ id = "commissioner", displayName = "Commissioner", description = "Complete 20 cases", stat = "casesCompleted", threshold = 20 }),
+	table.freeze({ id = "legend", displayName = "Legend", description = "Earn 50000 total XP", stat = "totalXPEarned", threshold = 50000 }),
+}) :: any
+
 return table.freeze({
 	INTEL_THRESHOLDS = INTEL_THRESHOLDS,
 	SCORING_TIERS = SCORING_TIERS,
@@ -120,4 +170,9 @@ return table.freeze({
 	XP_CURVE = XP_CURVE,
 	TOOL_UNLOCKS = TOOL_UNLOCKS,
 	INTEL_TIER_REVEALS = INTEL_TIER_REVEALS,
+	PAR_TIMES = PAR_TIMES,
+	SCORE_GRADES = SCORE_GRADES,
+	DISTRICT_ORDER = DISTRICT_ORDER,
+	BADGE_DEFINITIONS = BADGE_DEFINITIONS,
+	TITLE_DEFINITIONS = TITLE_DEFINITIONS,
 })

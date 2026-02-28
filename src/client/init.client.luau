@@ -45,6 +45,10 @@ local IntelMeterHUD = require(script.IntelMeterHUD)
 local RaidHUD = require(script.RaidHUD)
 local SyndicateUI = require(script.SyndicateUI)
 local InputHandler = require(script.InputHandler)
+local ScoreScreen = require(script.ScoreScreen)
+local ProfileUI = require(script.ProfileUI)
+local EvidenceVisuals = require(script.EvidenceVisuals)
+local TutorialOverlay = require(script.TutorialOverlay)
 
 print("[Client] Client modules loaded")
 
@@ -57,11 +61,16 @@ IntelMeterHUD.init()
 RaidHUD.init()
 SyndicateUI.init()
 InputHandler.init()
+ScoreScreen.init()
+ProfileUI.init()
+EvidenceVisuals.init()
+TutorialOverlay.init()
 
 UIController.registerScreen("CaseBoard", CaseBoardUI)
 UIController.registerScreen("Investigation", IntelMeterHUD)
 UIController.registerScreen("Raid", RaidHUD)
 UIController.registerScreen("Syndicate", SyndicateUI)
+UIController.registerScreen("Scoring", ScoreScreen)
 
 print("[Client] UI initialized")
 
@@ -98,6 +107,27 @@ btnIcon.TextColor3 = Color3.fromRGB(200, 220, 255)
 btnIcon.TextSize = 12
 btnIcon.Font = Enum.Font.Gotham
 btnIcon.Parent = caseBoardBtn
+
+-- Profile button (next to case board button)
+local profileBtn = Instance.new("TextButton")
+profileBtn.Name = "OpenProfile"
+profileBtn.Size = UDim2.new(0, 140, 0, 44)
+profileBtn.Position = UDim2.new(0, 210, 1, -60)
+profileBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 160)
+profileBtn.Text = "PROFILE [P]"
+profileBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+profileBtn.TextSize = 16
+profileBtn.Font = Enum.Font.GothamBold
+profileBtn.BorderSizePixel = 0
+profileBtn.Parent = caseBoardButtonGui
+
+local profileBtnCorner = Instance.new("UICorner")
+profileBtnCorner.CornerRadius = UDim.new(0, 8)
+profileBtnCorner.Parent = profileBtn
+
+profileBtn.MouseButton1Click:Connect(function()
+	ProfileUI.toggle()
+end)
 
 local inCase = false
 
@@ -139,6 +169,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 	if input.KeyCode == Enum.KeyCode.B and not inCase then
 		showCaseBoard()
+	elseif input.KeyCode == Enum.KeyCode.P then
+		ProfileUI.toggle()
 	end
 end)
 
@@ -165,6 +197,7 @@ if caseLoaded then
 		InputHandler.enable()
 		IntelMeterHUD.show()
 		UIController.showNotification("Case Loaded", data.caseName)
+		TutorialOverlay.onCaseLoaded()
 	end)
 end
 
@@ -193,6 +226,11 @@ if breachInitiated then
 		InputHandler.setMode("Raid")
 		IntelMeterHUD.hide()
 		RaidHUD.show()
+		TutorialOverlay.onBreach()
+		-- Slight delay for raid tutorial step
+		task.delay(2, function()
+			TutorialOverlay.onRaid()
+		end)
 	end)
 end
 
@@ -213,6 +251,8 @@ if caseCompleted then
 		IntelMeterHUD.reset()
 		IntelMeterHUD.hide()
 		RaidHUD.hide()
+		ScoreScreen.hide()
+		EvidenceVisuals.reset()
 		caseBoardBtn.Visible = true
 		InputHandler.setMode("None")
 		UIController.showNotification("Case Complete", "Earned " .. tostring(data.totalXP) .. " XP")
@@ -231,6 +271,45 @@ local rankUp = getRemote("RankUp")
 if rankUp then
 	rankUp.OnClientEvent:Connect(function(data: any)
 		UIController.showNotification("Rank Up!", "You are now a " .. data.newRank, 7)
+	end)
+end
+
+-- Score screen
+local scorePresented = getRemote("ScorePresented")
+if scorePresented then
+	scorePresented.OnClientEvent:Connect(function(data: any)
+		ScoreScreen.showScore(data)
+	end)
+end
+
+-- Evidence visuals
+local evidencePositions = getRemote("EvidencePositions")
+if evidencePositions then
+	evidencePositions.OnClientEvent:Connect(function(positions: any)
+		EvidenceVisuals.loadPositions(positions)
+	end)
+end
+
+-- Wire intel updates to remove discovered evidence markers
+local intelUpdated = getRemote("IntelUpdated")
+if intelUpdated then
+	intelUpdated.OnClientEvent:Connect(function(data: any)
+		if data and data.evidenceId then
+			EvidenceVisuals.onEvidenceDiscovered(data.evidenceId)
+			TutorialOverlay.onNearEvidence()
+		end
+		-- After discovering some evidence, hint about breach
+		if data and data.points and data.points >= 10 then
+			TutorialOverlay.onSomeEvidence()
+		end
+	end)
+end
+
+-- Player data loaded — check tutorial
+local playerDataLoaded = getRemote("PlayerDataLoaded")
+if playerDataLoaded then
+	playerDataLoaded.OnClientEvent:Connect(function(data: any)
+		TutorialOverlay.checkFirstTime(data)
 	end)
 end
 

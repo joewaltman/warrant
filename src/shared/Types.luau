@@ -73,6 +73,34 @@ export type ScoringResult = {
 	speedBonus: number,
 	collateralPenalty: number,
 	totalXP: number,
+	maxPossibleXP: number,
+}
+
+export type DetectiveStats = {
+	casesCompleted: number,
+	totalEvidenceFound: number,
+	perfectRaids: number,
+	speedRecords: number,
+	totalXPEarned: number,
+	favoriteDistrict: string,
+	highestIntelTier: number,
+}
+
+export type BadgeDefinition = {
+	id: string,
+	name: string,
+	description: string,
+	stat: string,
+	threshold: number,
+	icon: string?,
+}
+
+export type TitleDefinition = {
+	id: string,
+	displayName: string,
+	description: string,
+	stat: string,
+	threshold: number,
 }
 
 export type SyndicateStats = {

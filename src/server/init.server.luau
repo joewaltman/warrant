@@ -27,6 +27,9 @@ local ALL_REMOTES = {
 	"SetupPhaseStarted", "WaitingForSetup", "DetectivePhaseStarted",
 	"MatchEnded", "SuspectExposed", "TeamMateExposed",
 	"OpenCaseBoard",
+	"RequestProfileData", "ProfileDataLoaded",
+	"EvidencePositions",
+	"TutorialProgress",
 }
 
 for _, name in ALL_REMOTES do
@@ -71,6 +74,7 @@ local SyndicateMatch = safeRequire(script.SyndicateMatch)
 local AntiExploit = safeRequire(script.AntiExploit)
 local LayoutBuilder = safeRequire(script.LayoutBuilder)
 local PrecinctBuilder = safeRequire(script.PrecinctBuilder)
+local StatsTracker = safeRequire(script.StatsTracker)
 
 print("[Server] Server modules loaded")
 
@@ -188,6 +192,10 @@ local function onRaidComplete(player: Player)
 		ProgressionSystem.recordCaseCompletion(player, activeCase.caseData.caseId, result.totalXP)
 	end
 
+	if StatsTracker then
+		StatsTracker.recordCaseStats(player, activeCase.caseData, result, metrics, raid.intelTier)
+	end
+
 	task.spawn(function()
 		task.wait(5)
 		CaseManager.completeCase(player, result.totalXP)
@@ -254,7 +262,19 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 		if evidenceModule and evidenceModule:IsA("ModuleScript") then
 			local evMod = require(evidenceModule) :: any
 			if evMod.getEvidence then
-				EvidenceSystem.loadEvidence(caseId :: string, evMod.getEvidence())
+				local evidenceList = evMod.getEvidence()
+				EvidenceSystem.loadEvidence(caseId :: string, evidenceList)
+
+				-- Send evidence positions to client for visual markers
+				local positions = {}
+				for _, ev in evidenceList do
+					table.insert(positions, {
+						id = ev.id,
+						position = ev.position + CASE_BUILDING_OFFSET,
+						discoveryMethod = ev.discoveryMethod,
+					})
+				end
+				getRemote("EvidencePositions"):FireClient(player, positions)
 			end
 		end
 	end
@@ -513,6 +533,31 @@ getRemote("RequestIdentify").OnServerEvent:Connect(function(player: Player)
 					break
 				end
 			end
+		end
+	end
+end)
+
+------------------------------------------------------------------------
+-- PROFILE DATA
+------------------------------------------------------------------------
+getRemote("RequestProfileData").OnServerEvent:Connect(function(player: Player)
+	if StatsTracker then
+		StatsTracker.sendProfileData(player)
+	end
+end)
+
+------------------------------------------------------------------------
+-- TUTORIAL PROGRESS
+------------------------------------------------------------------------
+getRemote("TutorialProgress").OnServerEvent:Connect(function(player: Player, step: unknown)
+	if typeof(step) ~= "number" then
+		return
+	end
+
+	if ProgressionSystem then
+		local data = ProgressionSystem.getPlayerData(player)
+		if data and (step :: number) > data.tutorialStep then
+			data.tutorialStep = step :: number
 		end
 	end
 end)
