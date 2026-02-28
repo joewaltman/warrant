@@ -32,6 +32,7 @@ export type NPCInstance = {
 local NPCBehavior = {}
 
 local activeNPCs: { [string]: NPCInstance } = {}
+local activeWitnesses: { [string]: Model } = {}
 
 local ALERT_RADIUS = 30
 local SURRENDER_HEALTH_THRESHOLD = 0.25
@@ -653,6 +654,108 @@ function NPCBehavior.isNPCInRange(npcId: string, position: Vector3, range: numbe
 	end
 
 	return (root.Position - position).Magnitude <= range
+end
+
+------------------------------------------------------------------------
+-- WITNESS NPC CREATION
+------------------------------------------------------------------------
+function NPCBehavior.createWitnessNPC(witnessData: { id: string, name: string, dialogue: string, position: Vector3, interactRange: number }): (Model, ProximityPrompt)
+	local model = Instance.new("Model")
+	model.Name = "Witness_" .. witnessData.id
+
+	local skinColor = SKIN_TONES[math.random(1, #SKIN_TONES)]
+	local clothingColor = CLOTHING_COLORS[math.random(1, #CLOTHING_COLORS)]
+
+	-- HumanoidRootPart (anchored for witnesses)
+	local rootPart = Instance.new("Part")
+	rootPart.Name = "HumanoidRootPart"
+	rootPart.Size = Vector3.new(2, 2, 1)
+	rootPart.CFrame = CFrame.new(witnessData.position + Vector3.new(0, 3, 0))
+	rootPart.Anchored = true
+	rootPart.Transparency = 1
+	rootPart.CanCollide = false
+	rootPart.Parent = model
+
+	model.PrimaryPart = rootPart
+
+	-- Torso
+	local torso = createBodyPart(model, "Torso", Vector3.new(2, 2, 1),
+		CFrame.new(witnessData.position + Vector3.new(0, 3, 0)), clothingColor)
+	torso.Anchored = true
+	weldParts(rootPart, torso)
+
+	-- Head
+	local head = createBodyPart(model, "Head", Vector3.new(1.2, 1.2, 1.2),
+		CFrame.new(witnessData.position + Vector3.new(0, 4.6, 0)), skinColor, Enum.PartType.Ball)
+	head.Anchored = true
+	weldParts(torso, head)
+
+	-- Left Arm
+	local leftArm = createBodyPart(model, "Left Arm", Vector3.new(1, 2, 1),
+		CFrame.new(witnessData.position + Vector3.new(-1.5, 3, 0)), clothingColor)
+	leftArm.Anchored = true
+	weldParts(torso, leftArm)
+
+	-- Right Arm
+	local rightArm = createBodyPart(model, "Right Arm", Vector3.new(1, 2, 1),
+		CFrame.new(witnessData.position + Vector3.new(1.5, 3, 0)), clothingColor)
+	rightArm.Anchored = true
+	weldParts(torso, rightArm)
+
+	-- Left Leg
+	local leftLeg = createBodyPart(model, "Left Leg", Vector3.new(1, 2, 1),
+		CFrame.new(witnessData.position + Vector3.new(-0.5, 1, 0)), Color3.fromRGB(50, 50, 55))
+	leftLeg.Anchored = true
+	weldParts(torso, leftLeg)
+
+	-- Right Leg
+	local rightLeg = createBodyPart(model, "Right Leg", Vector3.new(1, 2, 1),
+		CFrame.new(witnessData.position + Vector3.new(0.5, 1, 0)), Color3.fromRGB(50, 50, 55))
+	rightLeg.Anchored = true
+	weldParts(torso, rightLeg)
+
+	-- Name billboard (yellow text, witness style)
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "WitnessBillboard"
+	billboard.Size = UDim2.new(0, 140, 0, 30)
+	billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = rootPart
+	billboard.Parent = model
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, 0, 1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = witnessData.name
+	nameLabel.TextColor3 = Color3.fromRGB(255, 220, 80)
+	nameLabel.TextSize = 14
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextStrokeTransparency = 0.3
+	nameLabel.Parent = billboard
+
+	-- ProximityPrompt
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Talk"
+	prompt.ObjectText = witnessData.name
+	prompt.MaxActivationDistance = witnessData.interactRange or 10
+	prompt.HoldDuration = 0
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = rootPart
+
+	model.Parent = workspace
+	activeWitnesses[witnessData.id] = model
+
+	return model, prompt
+end
+
+function NPCBehavior.cleanupWitnesses()
+	for _, witnessModel in activeWitnesses do
+		if witnessModel then
+			witnessModel:Destroy()
+		end
+	end
+	table.clear(activeWitnesses)
 end
 
 ------------------------------------------------------------------------

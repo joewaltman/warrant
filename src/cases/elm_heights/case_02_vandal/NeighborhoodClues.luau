@@ -9,20 +9,23 @@ function module.getClues()
 	return {
 		{
 			id = "elm02_clue_janitor",
+			name = "Frank the Janitor",
 			text = "The janitor found the front door propped open with a rock when he arrived at 6 AM.",
-			position = Vector3.new(30, 1, 10),
+			position = Vector3.new(40, 1, 20),
 			interactRange = 10,
 		},
 		{
 			id = "elm02_clue_dogwalker",
+			name = "Dog Walker",
 			text = "A late-night dog walker saw two teens running from the building around midnight.",
-			position = Vector3.new(-35, 1, 5),
+			position = Vector3.new(-45, 1, 15),
 			interactRange = 10,
 		},
 		{
 			id = "elm02_clue_shopkeeper",
+			name = "Corner Store Clerk",
 			text = "The corner store clerk sold four cans of red spray paint to a kid in a hoodie yesterday evening.",
-			position = Vector3.new(40, 1, -15),
+			position = Vector3.new(50, 1, -25),
 			interactRange = 10,
 		},
 	}

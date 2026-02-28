@@ -7,14 +7,14 @@ local module = {}
 
 function module.getEvidence()
 	return {
-		-- Lobby evidence
+		-- Lobby evidence (room at 0,0,0 size 16x12x14)
 		{
 			id = "elm02_graffiti_tag",
 			name = "Graffiti Tag on Wall",
 			description = "A large spray-painted tag reading 'KNGZ' across the lobby mural.",
 			pointValue = 3,
 			discoveryMethod = "proximity" :: "proximity",
-			position = Vector3.new(0, 4, -3),
+			position = Vector3.new(0, 5, -5),
 		},
 		{
 			id = "elm02_spray_can",
@@ -22,7 +22,7 @@ function module.getEvidence()
 			description = "A red spray can rolled under a bench. Fingerprints visible on the nozzle.",
 			pointValue = 3,
 			discoveryMethod = "interact" :: "interact",
-			position = Vector3.new(-3, 0.5, 2),
+			position = Vector3.new(-5, 0.5, 3),
 		},
 		{
 			id = "elm02_shoe_print",
@@ -30,17 +30,17 @@ function module.getEvidence()
 			description = "A clear shoe print in red paint on the lobby tile. Size 11 sneaker tread.",
 			pointValue = 2,
 			discoveryMethod = "proximity" :: "proximity",
-			position = Vector3.new(2, 0.2, 0),
+			position = Vector3.new(3, 0.5, 0),
 		},
 
-		-- Office evidence
+		-- Office evidence (room at 15,0,0 size 14x12x12)
 		{
 			id = "elm02_smashed_computer",
 			name = "Smashed Computer Monitor",
 			description = "The office computer monitor has been knocked off the desk and cracked.",
 			pointValue = 2,
 			discoveryMethod = "proximity" :: "proximity",
-			position = Vector3.new(14, 1, 2),
+			position = Vector3.new(17, 0.5, 2),
 		},
 		{
 			id = "elm02_torn_flyer",
@@ -48,7 +48,7 @@ function module.getEvidence()
 			description = "A community event flyer ripped in half with 'CANCELLED' scrawled on it.",
 			pointValue = 3,
 			discoveryMethod = "interact" :: "interact",
-			position = Vector3.new(10, 3, -2),
+			position = Vector3.new(12, 3, -3),
 		},
 		{
 			id = "elm02_fingerprints_desk",
@@ -56,17 +56,17 @@ function module.getEvidence()
 			description = "Latent prints on the director's desk near scattered papers.",
 			pointValue = 4,
 			discoveryMethod = "scan" :: "scan",
-			position = Vector3.new(13, 3, 0),
+			position = Vector3.new(18, 3, 0),
 		},
 
-		-- Storage evidence
+		-- Storage evidence (room at 0,0,-14 size 14x12x10)
 		{
 			id = "elm02_broken_window",
 			name = "Broken Storage Window",
 			description = "A small window shattered inward. Entry point with fabric caught on glass.",
 			pointValue = 4,
 			discoveryMethod = "interact" :: "interact",
-			position = Vector3.new(-3, 5, -14),
+			position = Vector3.new(-4, 5, -17),
 		},
 		{
 			id = "elm02_toppled_shelves",
@@ -74,17 +74,17 @@ function module.getEvidence()
 			description = "Metal shelving pushed over deliberately. Paint supplies scattered.",
 			pointValue = 2,
 			discoveryMethod = "proximity" :: "proximity",
-			position = Vector3.new(2, 1, -12),
+			position = Vector3.new(3, 0.5, -14),
 		},
 
-		-- Restroom evidence
+		-- Restroom evidence (room at 15,0,-14 size 10x12x10)
 		{
 			id = "elm02_stencil",
 			name = "Cardboard Stencil",
 			description = "A cut-out stencil matching the lobby graffiti pattern, hidden in a trash can.",
 			pointValue = 5,
 			discoveryMethod = "interact" :: "interact",
-			position = Vector3.new(14, 1, -13),
+			position = Vector3.new(17, 0.5, -16),
 		},
 
 		-- Exterior evidence
@@ -94,7 +94,7 @@ function module.getEvidence()
 			description = "Security camera captured two hooded figures approaching at 11:47 PM.",
 			pointValue = 4,
 			discoveryMethod = "photograph" :: "photograph",
-			position = Vector3.new(20, 8, 10),
+			position = Vector3.new(30, 5, 20),
 		},
 	}
 end

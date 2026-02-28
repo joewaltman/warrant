@@ -71,6 +71,8 @@ function CaseServerInit.start()
 		"NPCFired", "SuspectArrested",
 		-- Party remotes (needed so client doesn't hang on WaitForChild)
 		"PartyInvite", "PartyAccept", "PartyLeave",
+		-- Witness system
+		"ClueDiscovered",
 	}
 
 	for _, name in ALL_REMOTES do
@@ -201,7 +203,10 @@ function CaseServerInit.start()
 				end
 			end
 			if RaidController then RaidController.cleanup(player) end
-			if NPCBehavior then NPCBehavior.cleanup() end
+			if NPCBehavior then
+				NPCBehavior.cleanup()
+				NPCBehavior.cleanupWitnesses()
+			end
 
 			-- Save progression before teleporting back
 			if ProgressionSystem then
@@ -275,6 +280,72 @@ function CaseServerInit.start()
 					end
 					for _, p in players do
 						getRemote("EvidencePositions"):FireClient(p, positions)
+					end
+				end
+			end
+		end
+
+		-- Initialize witness NPCs from NeighborhoodClues
+		if NPCBehavior then
+			local cluesModule = caseFolder:FindFirstChild("NeighborhoodClues")
+			if cluesModule and cluesModule:IsA("ModuleScript") then
+				local cluesMod = require(cluesModule) :: any
+				if cluesMod.getClues then
+					local clues = cluesMod.getClues()
+					for _, clue in clues do
+						local witnessData = {
+							id = clue.id,
+							name = clue.name or "Witness",
+							dialogue = clue.text,
+							position = clue.position,
+							interactRange = clue.interactRange or 10,
+						}
+						local _, prompt = NPCBehavior.createWitnessNPC(witnessData)
+						prompt.Triggered:Connect(function(triggeringPlayer: Player)
+							-- Fire dialogue to client
+							getRemote("ClueDiscovered"):FireClient(triggeringPlayer, witnessData.name, witnessData.dialogue)
+
+							-- Award 2 intel points
+							if EvidenceSystem then
+								local intel = EvidenceSystem.getPlayerIntel(triggeringPlayer)
+								if intel and not intel.discoveredEvidence["witness_" .. clue.id] then
+									intel.discoveredEvidence["witness_" .. clue.id] = true
+									intel.points += 2
+
+									-- Recalculate tier
+									local oldTier = intel.tier
+									local newTier = 0
+									for i = 4, 0, -1 do
+										if intel.points >= GameConfig.INTEL_THRESHOLDS[i] then
+											newTier = i
+											break
+										end
+									end
+									intel.tier = newTier
+
+									-- Notify client
+									getRemote("IntelUpdated"):FireClient(triggeringPlayer, {
+										points = intel.points,
+										tier = intel.tier,
+										tierName = GameConfig.INTEL_TIER_REVEALS[intel.tier + 1].tierName,
+										evidenceId = "witness_" .. clue.id,
+										evidenceName = witnessData.name .. " (Witness)",
+										pointValue = 2,
+									})
+
+									if newTier > oldTier then
+										getRemote("IntelTierChanged"):FireClient(triggeringPlayer, {
+											newTier = newTier,
+											tierName = GameConfig.INTEL_TIER_REVEALS[newTier + 1].tierName,
+											tierConfig = GameConfig.INTEL_TIER_REVEALS[newTier + 1],
+										})
+									end
+
+									-- Destroy the prompt so it can't be triggered again
+									prompt:Destroy()
+								end
+							end
+						end)
 					end
 				end
 			end

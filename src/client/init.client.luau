@@ -51,6 +51,7 @@ local ProfileUI = require(script.ProfileUI)
 local EvidenceVisuals = require(script.EvidenceVisuals)
 local TutorialOverlay = require(script.TutorialOverlay)
 local CombatFeedback = require(script.CombatFeedback)
+local WitnessDialogueUI = require(script.WitnessDialogueUI)
 
 print("[Client] Client modules loaded")
 
@@ -68,6 +69,7 @@ ProfileUI.init()
 EvidenceVisuals.init()
 TutorialOverlay.init()
 CombatFeedback.init()
+WitnessDialogueUI.init()
 
 UIController.registerScreen("CaseBoard", CaseBoardUI)
 UIController.registerScreen("Investigation", IntelMeterHUD)

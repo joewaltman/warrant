@@ -130,6 +130,22 @@ export type CosmeticUnlock = {
 	requirementThreshold: number,
 }
 
+export type NeighborhoodClue = {
+	id: string,
+	text: string,
+	name: string,
+	position: Vector3,
+	interactRange: number,
+}
+
+export type WitnessNPC = {
+	id: string,
+	name: string,
+	dialogue: string,
+	position: Vector3,
+	interactRange: number,
+}
+
 export type TeleportData = {
 	caseId: string,
 	partyLeaderId: number,
