@@ -1,6 +1,7 @@
 --!strict
 -- CaseManager | WARRANT: Case Closed
 -- Manages the full case lifecycle: loading, spawning, investigation, breach, completion
+-- Supports multi-player (party) cases: all party members share one layout.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -66,13 +67,12 @@ function CaseManager.isOnCooldown(player: Player, caseId: string): boolean
 	return false
 end
 
-function CaseManager.loadCase(player: Player, caseId: string, layoutModel: Model?): (boolean, string?)
-	if activeCases[player.UserId] then
-		return false, "Player already has an active case"
-	end
-
-	if CaseManager.isOnCooldown(player, caseId) then
-		return false, "Case is on cooldown"
+function CaseManager.loadCase(players: { Player }, caseId: string, layoutModel: Model?): (boolean, string?)
+	-- Check if any player already has an active case
+	for _, player in players do
+		if activeCases[player.UserId] then
+			return false, "Player " .. player.Name .. " already has an active case"
+		end
 	end
 
 	local caseFolder = getCaseModules(caseId)
@@ -84,27 +84,33 @@ function CaseManager.loadCase(player: Player, caseId: string, layoutModel: Model
 	local config = require(configModule) :: any
 	local caseData: CaseData = config.getData()
 
-	local activeCase: ActiveCase = {
-		caseData = caseData,
-		player = player,
-		state = "Loading" :: CaseState,
-		layoutModel = layoutModel,
-		startTime = tick(),
-		breachTime = nil,
-	}
-	activeCases[player.UserId] = activeCase
+	-- Create an ActiveCase record for each player pointing to the same layoutModel
+	for _, player in players do
+		local activeCase: ActiveCase = {
+			caseData = caseData,
+			player = player,
+			state = "Loading" :: CaseState,
+			layoutModel = layoutModel,
+			startTime = tick(),
+			breachTime = nil,
+		}
+		activeCases[player.UserId] = activeCase
+		activeCase.state = "Investigating"
 
-	activeCase.state = "Investigating"
+		getRemote("CaseLoaded"):FireClient(player, {
+			caseId = caseData.caseId,
+			caseName = caseData.caseName,
+			district = caseData.district,
+			crimeType = caseData.crimeType,
+			difficulty = caseData.difficulty,
+		})
+	end
 
-	getRemote("CaseLoaded"):FireClient(player, {
-		caseId = caseData.caseId,
-		caseName = caseData.caseName,
-		district = caseData.district,
-		crimeType = caseData.crimeType,
-		difficulty = caseData.difficulty,
-	})
-
-	print("[CaseManager] Case loaded:", caseData.caseName, "for", player.Name)
+	local playerNames = {}
+	for _, player in players do
+		table.insert(playerNames, player.Name)
+	end
+	print("[CaseManager] Case loaded:", caseData.caseName, "for", table.concat(playerNames, ", "))
 	return true, nil
 end
 
@@ -136,8 +142,19 @@ function CaseManager.completeCase(player: Player, totalXP: number)
 
 	activeCase.state = "Complete"
 
+	-- Only destroy layout once (first player to complete owns the cleanup)
 	if activeCase.layoutModel then
-		activeCase.layoutModel:Destroy()
+		-- Check if any other player still references this layout
+		local layoutStillUsed = false
+		for userId, otherCase in activeCases do
+			if userId ~= player.UserId and otherCase.layoutModel == activeCase.layoutModel and otherCase.state ~= "Complete" then
+				layoutStillUsed = true
+				break
+			end
+		end
+		if not layoutStillUsed then
+			activeCase.layoutModel:Destroy()
+		end
 		activeCase.layoutModel = nil
 	end
 
@@ -159,8 +176,18 @@ function CaseManager.abandonCase(player: Player)
 		return
 	end
 
+	-- Only destroy layout if no other player references it
 	if activeCase.layoutModel then
-		activeCase.layoutModel:Destroy()
+		local layoutStillUsed = false
+		for userId, otherCase in activeCases do
+			if userId ~= player.UserId and otherCase.layoutModel == activeCase.layoutModel then
+				layoutStillUsed = true
+				break
+			end
+		end
+		if not layoutStillUsed then
+			activeCase.layoutModel:Destroy()
+		end
 	end
 
 	activeCases[player.UserId] = nil

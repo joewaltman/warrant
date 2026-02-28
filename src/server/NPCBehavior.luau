@@ -3,6 +3,7 @@
 -- Behavior tree system for suspect NPCs: SURRENDER, FLEE, RESIST
 -- Includes R6-style character rigs, combat AI, and visual state indicators
 
+local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -464,7 +465,39 @@ function NPCBehavior.executeFlee(npc: NPCInstance)
 end
 
 ------------------------------------------------------------------------
--- BEHAVIOR: RESIST (with combat AI)
+-- HELPER: Find nearest player to an NPC
+------------------------------------------------------------------------
+local function findNearestPlayer(npc: NPCInstance): Player?
+	local npcRoot = npc.model.PrimaryPart
+	if not npcRoot then
+		return nil
+	end
+
+	local nearestPlayer: Player? = nil
+	local nearestDist = math.huge
+
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character then
+			local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if rootPart then
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health > 0 then
+					local dist = (rootPart.Position - npcRoot.Position).Magnitude
+					if dist < nearestDist then
+						nearestDist = dist
+						nearestPlayer = player
+					end
+				end
+			end
+		end
+	end
+
+	return nearestPlayer
+end
+
+------------------------------------------------------------------------
+-- BEHAVIOR: RESIST (with combat AI, multi-target support)
 ------------------------------------------------------------------------
 function NPCBehavior.executeResist(npc: NPCInstance)
 	npc.state = "Resisting"
@@ -475,7 +508,7 @@ function NPCBehavior.executeResist(npc: NPCInstance)
 	local diff = npc.config.difficulty or 1
 	local stats = DIFFICULTY_STATS[diff] or DIFFICULTY_STATS[1]
 
-	-- Combat loop: NPC shoots at player
+	-- Combat loop: NPC shoots at nearest player
 	task.spawn(function()
 		while npc.state == "Resisting" and npc.health > 0 do
 			-- Check if health dropped below threshold
@@ -488,9 +521,16 @@ function NPCBehavior.executeResist(npc: NPCInstance)
 				break
 			end
 
-			-- Fire at player
-			if npc.targetPlayer and npc.targetPlayer.Character then
-				local playerRoot = npc.targetPlayer.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			-- Pick nearest player as target (re-evaluate each tick)
+			local currentTarget = findNearestPlayer(npc)
+			if not currentTarget then
+				-- Fall back to original target if no players found nearby
+				currentTarget = npc.targetPlayer
+			end
+
+			-- Fire at target
+			if currentTarget and currentTarget.Character then
+				local playerRoot = currentTarget.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 				local npcRoot = npc.model.PrimaryPart
 				if playerRoot and npcRoot then
 					-- Face the player
@@ -508,7 +548,7 @@ function NPCBehavior.executeResist(npc: NPCInstance)
 					local hasLOS = false
 					if result then
 						local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
-						if hitModel and hitModel == npc.targetPlayer.Character then
+						if hitModel and hitModel == currentTarget.Character then
 							hasLOS = true
 						end
 					elseif not result then
@@ -523,13 +563,13 @@ function NPCBehavior.executeResist(npc: NPCInstance)
 						local CombatSystem = require(script.Parent.CombatSystem) :: any
 
 						if hitRoll then
-							CombatSystem.damagePlayer(npc.targetPlayer, stats.damage)
+							CombatSystem.damagePlayer(currentTarget, stats.damage)
 						end
 
 						-- Fire visual feedback to client
 						local npcFiredRemote = getRemote("NPCFired")
 						if npcFiredRemote then
-							npcFiredRemote:FireClient(npc.targetPlayer, {
+							npcFiredRemote:FireClient(currentTarget, {
 								npcId = npc.config.id,
 								position = npcRoot.Position,
 								hit = hitRoll,

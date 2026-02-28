@@ -77,7 +77,12 @@ UIController.registerScreen("Scoring", ScoreScreen)
 print("[Client] UI initialized")
 
 ------------------------------------------------------------------------
--- STEP 5: PERSISTENT CASE BOARD BUTTON (always visible in precinct)
+-- STEP 5: DETECT SERVER MODE (case server vs hub)
+------------------------------------------------------------------------
+local isCaseServer = ReplicatedStorage:FindFirstChild("CaseServerMode") ~= nil
+
+------------------------------------------------------------------------
+-- STEP 5B: PERSISTENT CASE BOARD BUTTON (hub only)
 ------------------------------------------------------------------------
 local caseBoardButtonGui = Instance.new("ScreenGui")
 caseBoardButtonGui.Name = "CaseBoardButtonGui"
@@ -182,6 +187,15 @@ if openBoardRemote then
 	openBoardRemote.OnClientEvent:Connect(function()
 		showCaseBoard()
 	end)
+end
+
+------------------------------------------------------------------------
+-- CASE SERVER MODE: Hide precinct UI, auto-show investigation HUD
+------------------------------------------------------------------------
+if isCaseServer then
+	caseBoardBtn.Visible = false
+	profileBtn.Visible = false
+	inCase = true
 end
 
 ------------------------------------------------------------------------

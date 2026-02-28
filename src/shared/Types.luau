@@ -130,6 +130,18 @@ export type CosmeticUnlock = {
 	requirementThreshold: number,
 }
 
+export type TeleportData = {
+	caseId: string,
+	partyLeaderId: number,
+	partyMembers: { number },
+}
+
+export type PartyInfo = {
+	partyId: string,
+	leaderId: number,
+	members: { number }, -- UserIds
+}
+
 return table.freeze({
 	IntelTier = IntelTier,
 })

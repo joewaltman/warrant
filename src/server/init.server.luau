@@ -1,11 +1,28 @@
 --!strict
 -- Server entry | WARRANT: Case Closed
 -- Initializes all server systems and wires up RemoteEvent handlers
+-- Branches at runtime: reserved servers run CaseServerInit, public servers run the hub.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 print("[Server] WARRANT: Case Closed loading...")
+
+------------------------------------------------------------------------
+-- EARLY BRANCH: RESERVED SERVER → CASE SERVER
+------------------------------------------------------------------------
+local TeleportManager = require(script.TeleportManager)
+
+if TeleportManager.isReservedServer() then
+	-- CASE SERVER: delegate entirely to CaseServerInit
+	require(script.CaseServerInit).start()
+	return
+end
+
+------------------------------------------------------------------------
+-- HUB SERVER: Everything below runs only on public servers
+------------------------------------------------------------------------
+print("[Hub] Initializing hub server...")
 
 ------------------------------------------------------------------------
 -- STEP 1: CREATE ALL REMOTE EVENTS FIRST (before anything else)
@@ -31,6 +48,8 @@ local ALL_REMOTES = {
 	"EvidencePositions",
 	"TutorialProgress",
 	"NPCFired", "SuspectArrested",
+	-- Party remotes
+	"PartyInvite", "PartyAccept", "PartyLeave",
 }
 
 for _, name in ALL_REMOTES do
@@ -41,7 +60,7 @@ for _, name in ALL_REMOTES do
 	end
 end
 
-print("[Server] RemoteEvents created")
+print("[Hub] RemoteEvents created")
 
 ------------------------------------------------------------------------
 -- STEP 2: LOAD SHARED MODULES
@@ -50,7 +69,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Types"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
-print("[Server] Shared modules loaded")
+print("[Hub] Shared modules loaded")
 
 ------------------------------------------------------------------------
 -- STEP 3: LOAD SERVER MODULES (with error reporting)
@@ -58,26 +77,21 @@ print("[Server] Shared modules loaded")
 local function safeRequire(moduleScript: ModuleScript): any
 	local success, result = pcall(require, moduleScript)
 	if not success then
-		warn("[Server] Failed to load", moduleScript.Name, ":", result)
+		warn("[Hub] Failed to load", moduleScript.Name, ":", result)
 		return nil
 	end
 	return result
 end
 
 local CaseManager = safeRequire(script.CaseManager)
-local EvidenceSystem = safeRequire(script.EvidenceSystem)
-local RaidController = safeRequire(script.RaidController)
-local NPCBehavior = safeRequire(script.NPCBehavior)
-local CombatSystem = safeRequire(script.CombatSystem)
-local ScoringSystem = safeRequire(script.ScoringSystem)
 local ProgressionSystem = safeRequire(script.ProgressionSystem)
 local SyndicateMatch = safeRequire(script.SyndicateMatch)
 local AntiExploit = safeRequire(script.AntiExploit)
-local LayoutBuilder = safeRequire(script.LayoutBuilder)
 local PrecinctBuilder = safeRequire(script.PrecinctBuilder)
 local StatsTracker = safeRequire(script.StatsTracker)
+local PartyManager = safeRequire(script.PartyManager)
 
-print("[Server] Server modules loaded")
+print("[Hub] Server modules loaded")
 
 ------------------------------------------------------------------------
 -- STEP 4: BUILD PRECINCT
@@ -85,11 +99,10 @@ print("[Server] Server modules loaded")
 local precinctModel: Model? = nil
 local caseBoardPart: Part? = nil
 local PRECINCT_SPAWN = Vector3.new(0, 5, -15)
-local CASE_BUILDING_OFFSET = Vector3.new(200, 0, 0) -- Cases spawn far from precinct
 
 if PrecinctBuilder then
 	precinctModel, caseBoardPart = PrecinctBuilder.build()
-	print("[Server] Precinct built")
+	print("[Hub] Precinct built")
 
 	-- Wire up the ProximityPrompt on the case board
 	if caseBoardPart then
@@ -112,7 +125,7 @@ else
 	platform.Material = Enum.Material.Concrete
 	platform.Color = Color3.fromRGB(100, 100, 100)
 	platform.Parent = workspace
-	warn("[Server] PrecinctBuilder failed, using fallback spawn")
+	warn("[Hub] PrecinctBuilder failed, using fallback spawn")
 end
 
 ------------------------------------------------------------------------
@@ -149,7 +162,7 @@ do
 	bloom.Threshold = 2
 	bloom.Parent = Lighting
 
-	print("[Server] Ambient lighting configured")
+	print("[Hub] Ambient lighting configured")
 end
 
 ------------------------------------------------------------------------
@@ -159,16 +172,6 @@ local function getRemote(name: string): RemoteEvent
 	return ReplicatedStorage:FindFirstChild(name) :: RemoteEvent
 end
 
-local function teleportPlayer(player: Player, position: Vector3)
-	local character = player.Character
-	if character then
-		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if rootPart then
-			rootPart.CFrame = CFrame.new(position)
-		end
-	end
-end
-
 ------------------------------------------------------------------------
 -- PLAYER JOIN / LEAVE
 ------------------------------------------------------------------------
@@ -176,82 +179,29 @@ Players.PlayerAdded:Connect(function(player: Player)
 	if ProgressionSystem then
 		ProgressionSystem.loadPlayer(player)
 	end
-	if EvidenceSystem then
-		EvidenceSystem.initForPlayer(player)
-	end
-	print("[Server] Player joined:", player.Name)
+	print("[Hub] Player joined:", player.Name)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
-	if CaseManager then CaseManager.onPlayerRemoving(player) end
-	if EvidenceSystem then EvidenceSystem.cleanup(player) end
-	if RaidController then RaidController.cleanup(player) end
-	if CombatSystem then CombatSystem.cleanup(player) end
+	-- If player is teleporting to a case server, skip DataStore save
+	if TeleportManager.isPlayerTeleporting(player) then
+		TeleportManager.clearTeleportingFlag(player)
+		-- Still clean up non-persistent state
+		if SyndicateMatch then SyndicateMatch.onPlayerRemoving(player) end
+		if AntiExploit then AntiExploit.cleanup(player) end
+		if PartyManager then PartyManager.onPlayerRemoving(player) end
+		print("[Hub] Player teleporting to case server, skipping save:", player.Name)
+		return
+	end
+
 	if ProgressionSystem then ProgressionSystem.cleanup(player) end
 	if SyndicateMatch then SyndicateMatch.onPlayerRemoving(player) end
 	if AntiExploit then AntiExploit.cleanup(player) end
+	if PartyManager then PartyManager.onPlayerRemoving(player) end
 end)
 
 ------------------------------------------------------------------------
--- RAID COMPLETION (server-driven callback)
-------------------------------------------------------------------------
-local function onRaidComplete(player: Player)
-	if not RaidController or not CaseManager or not ScoringSystem then
-		return
-	end
-
-	local raid = RaidController.getActiveRaid(player)
-	local activeCase = CaseManager.getActiveCase(player)
-	if not raid or not activeCase then
-		return
-	end
-
-	local intel = if EvidenceSystem then EvidenceSystem.getPlayerIntel(player) else nil
-	local evidencePoints = if intel then intel.points else 0
-
-	CaseManager.setState(player, "Scoring")
-
-	local metrics = RaidController.endRaid(player)
-	if not metrics then
-		return
-	end
-
-	local result = ScoringSystem.calculateScore(
-		activeCase.caseData,
-		raid.intelTier,
-		evidencePoints,
-		metrics
-	)
-
-	ScoringSystem.presentScore(player, result)
-
-	if ProgressionSystem then
-		ProgressionSystem.awardXP(player, result.totalXP)
-		ProgressionSystem.recordCaseCompletion(player, activeCase.caseData.caseId, result.totalXP)
-	end
-
-	if StatsTracker then
-		StatsTracker.recordCaseStats(player, activeCase.caseData, result, metrics, raid.intelTier)
-	end
-
-	task.spawn(function()
-		task.wait(5)
-		CaseManager.completeCase(player, result.totalXP)
-
-		if EvidenceSystem then
-			EvidenceSystem.cleanup(player)
-			EvidenceSystem.cleanupCase(activeCase.caseData.caseId)
-		end
-		if RaidController then RaidController.cleanup(player) end
-		if NPCBehavior then NPCBehavior.cleanup() end
-
-		-- Teleport player back to precinct
-		teleportPlayer(player, PRECINCT_SPAWN)
-	end)
-end
-
-------------------------------------------------------------------------
--- CASE SELECTION
+-- CASE SELECTION → TELEPORT TO RESERVED SERVER
 ------------------------------------------------------------------------
 getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: unknown)
 	if typeof(caseId) ~= "string" or not CaseManager then
@@ -275,273 +225,21 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 		return
 	end
 
-	-- Build layout programmatically
-	local layoutModel: Model? = nil
-	if LayoutBuilder and config.getLayout then
-		local layoutDef = config.getLayout()
-		-- Offset so building doesn't overlap precinct
-		layoutDef.origin = CASE_BUILDING_OFFSET
-		layoutModel = LayoutBuilder.build(layoutDef)
-		layoutModel.Parent = workspace
-	end
-
-	local success, err = CaseManager.loadCase(player, caseId :: string, layoutModel)
-	if not success then
-		warn("[Server] Case load failed:", err)
-		if layoutModel then
-			layoutModel:Destroy()
-		end
+	if CaseManager.isOnCooldown(player, caseId :: string) then
 		return
 	end
 
-	-- Initialize evidence (offset positions so server-side comparisons work)
-	if EvidenceSystem then
-		local evidenceModule = caseFolder:FindFirstChild("EvidenceMap")
-		if evidenceModule and evidenceModule:IsA("ModuleScript") then
-			local evMod = require(evidenceModule) :: any
-			if evMod.getEvidence then
-				local evidenceList = evMod.getEvidence()
-
-				-- Offset evidence positions to match building location
-				for _, ev in evidenceList do
-					ev.position = ev.position + CASE_BUILDING_OFFSET
-				end
-
-				EvidenceSystem.loadEvidence(caseId :: string, evidenceList)
-
-				-- Send evidence positions to client for visual markers
-				local positions = {}
-				for _, ev in evidenceList do
-					table.insert(positions, {
-						id = ev.id,
-						position = ev.position,
-						discoveryMethod = ev.discoveryMethod,
-					})
-				end
-				getRemote("EvidencePositions"):FireClient(player, positions)
-			end
-		end
+	-- Gather party members (or just the solo player)
+	local playersToTeleport: { Player }
+	if PartyManager then
+		local party = PartyManager.getParty(player)
+		playersToTeleport = party or { player }
+	else
+		playersToTeleport = { player }
 	end
 
-	-- Initialize combat
-	if CombatSystem then
-		local armorBonus = if ProgressionSystem and ProgressionSystem.getPlayerLevel(player) >= 50 then 15 else 0
-		CombatSystem.initPlayer(player, armorBonus)
-	end
-
-	-- Teleport player to case building
-	teleportPlayer(player, CASE_BUILDING_OFFSET + Vector3.new(0, 5, -20))
-end)
-
-------------------------------------------------------------------------
--- BREACH
-------------------------------------------------------------------------
-getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit or not AntiExploit.checkRateLimit(player, "breach") then
-		return
-	end
-
-	if not CaseManager or not EvidenceSystem or not RaidController then
-		return
-	end
-
-	local activeCase = CaseManager.getActiveCase(player)
-	if not activeCase or activeCase.state ~= "Investigating" then
-		return
-	end
-
-	local success, intelTier = EvidenceSystem.breach(player)
-	if not success then
-		return
-	end
-
-	CaseManager.setState(player, "Raiding")
-
-	local caseFolder = CaseManager.getCaseFolder(activeCase.caseData.caseId)
-	local npcConfigs: { Types.NPCSuspect } = {}
-	if caseFolder then
-		local npcModule = caseFolder:FindFirstChild("NPCConfig")
-		if npcModule and npcModule:IsA("ModuleScript") then
-			local npcMod = require(npcModule) :: any
-			if npcMod.getNPCs then
-				npcConfigs = npcMod.getNPCs()
-			end
-		end
-	end
-
-	-- Offset NPC positions to match case building location
-	for _, npc in npcConfigs do
-		npc.position = npc.position + CASE_BUILDING_OFFSET
-		if npc.fleeRoute then
-			for i, point in npc.fleeRoute do
-				npc.fleeRoute[i] = point + CASE_BUILDING_OFFSET
-			end
-		end
-	end
-
-	RaidController.startRaid(player, activeCase.caseData.caseId, intelTier, npcConfigs, function()
-		onRaidComplete(player)
-	end)
-
-	local raid = RaidController.getActiveRaid(player)
-	if raid and NPCBehavior then
-		for _, activeNPC in raid.npcs do
-			local npcInstance = NPCBehavior.spawnNPC(activeNPC.config, activeNPC.assignedBehavior)
-			activeNPC.model = npcInstance.model
-		end
-		-- Alert all NPCs on breach with staggered delay
-		NPCBehavior.alertAllOnBreach(player)
-	end
-end)
-
-------------------------------------------------------------------------
--- EVIDENCE INTERACTION
-------------------------------------------------------------------------
-getRemote("RequestInteract").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then
-		return
-	end
-
-	if not CaseManager or not EvidenceSystem then
-		return
-	end
-
-	local activeCase = CaseManager.getActiveCase(player)
-	if not activeCase or activeCase.state ~= "Investigating" then
-		return
-	end
-
-	local character = player.Character
-	if not character then
-		return
-	end
-
-	local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not rootPart then
-		return
-	end
-
-	local evidence = EvidenceSystem.getEvidence(activeCase.caseData.caseId)
-	local nearestId: string? = nil
-	local nearestDist = 15
-
-	for _, item in evidence do
-		local intel = EvidenceSystem.getPlayerIntel(player)
-		if intel and not intel.discoveredEvidence[item.id] then
-			local dist = (rootPart.Position - item.position).Magnitude
-			if dist < nearestDist then
-				nearestDist = dist
-				nearestId = item.id
-			end
-		end
-	end
-
-	if nearestId then
-		EvidenceSystem.discoverEvidence(player, activeCase.caseData.caseId, nearestId)
-	end
-end)
-
-------------------------------------------------------------------------
--- WEAPON FIRE
-------------------------------------------------------------------------
-getRemote("RequestFireWeapon").OnServerEvent:Connect(function(player: Player, origin: unknown, direction: unknown)
-	if typeof(origin) ~= "Vector3" or typeof(direction) ~= "Vector3" then
-		return
-	end
-
-	if not AntiExploit or not AntiExploit.checkRateLimit(player, "fireWeapon") then
-		return
-	end
-
-	if not AntiExploit.validateRayOrigin(player, origin :: Vector3) then
-		return
-	end
-
-	if not CombatSystem or not RaidController then
-		return
-	end
-
-	local result = CombatSystem.fireWeapon(player, origin :: Vector3, direction :: Vector3)
-	RaidController.recordShot(player)
-
-	if result.hit and result.isNPC and result.target and NPCBehavior then
-		local didHit, isDowned = NPCBehavior.damageNPC(result.target, result.damage)
-		if isDowned then
-			RaidController.recordTakedown(player, result.target, result.isNonLethal)
-		end
-	end
-
-	if result.isCollateral then
-		RaidController.recordCollateral(player)
-	end
-end)
-
-------------------------------------------------------------------------
--- WEAPON SWITCH
-------------------------------------------------------------------------
-getRemote("RequestWeaponSwitch").OnServerEvent:Connect(function(player: Player, weapon: unknown)
-	if typeof(weapon) ~= "string" then
-		return
-	end
-
-	if ProgressionSystem and not ProgressionSystem.isToolUnlocked(player, weapon :: string) then
-		return
-	end
-
-	if CombatSystem then
-		CombatSystem.equipWeapon(player, weapon :: any)
-	end
-end)
-
-------------------------------------------------------------------------
--- ARREST
-------------------------------------------------------------------------
-getRemote("RequestArrest").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then
-		return
-	end
-
-	if not NPCBehavior or not RaidController then
-		return
-	end
-
-	local character = player.Character
-	if not character then
-		return
-	end
-
-	local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not rootPart then
-		return
-	end
-
-	local allNPCs = NPCBehavior.getAllNPCs()
-	for id, _npc in allNPCs do
-		if NPCBehavior.isNPCInRange(id, rootPart.Position, 8) then
-			if NPCBehavior.arrestNPC(id) then
-				RaidController.recordTakedown(player, id, true)
-
-				-- Fire SuspectArrested to client for HUD update
-				local raid = RaidController.getActiveRaid(player)
-				if raid then
-					getRemote("SuspectArrested"):FireClient(player, {
-						arrested = raid.metrics.suspectsArrested,
-						total = raid.metrics.totalSuspects,
-					})
-				end
-				break
-			end
-		end
-	end
-end)
-
-------------------------------------------------------------------------
--- MEDKIT
-------------------------------------------------------------------------
-getRemote("RequestMedkit").OnServerEvent:Connect(function(player: Player)
-	if CombatSystem then
-		CombatSystem.healPlayer(player)
-	end
+	-- Teleport to a reserved case server
+	TeleportManager.teleportToCase(playersToTeleport, caseId :: string)
 end)
 
 ------------------------------------------------------------------------
@@ -617,4 +315,46 @@ getRemote("TutorialProgress").OnServerEvent:Connect(function(player: Player, ste
 	end
 end)
 
-print("[Server] WARRANT: Case Closed loaded successfully")
+------------------------------------------------------------------------
+-- PARTY REMOTES
+------------------------------------------------------------------------
+getRemote("PartyInvite").OnServerEvent:Connect(function(player: Player, targetName: unknown)
+	if typeof(targetName) ~= "string" or not PartyManager then
+		return
+	end
+
+	local targetPlayer = Players:FindFirstChild(targetName :: string) :: Player?
+	if not targetPlayer then
+		return
+	end
+
+	-- Create party if leader doesn't have one
+	local partyInfo = PartyManager.getPartyInfo(player)
+	if not partyInfo then
+		PartyManager.createParty(player)
+	end
+
+	-- Send invite to target player
+	local partyInfoNow = PartyManager.getPartyInfo(player)
+	if partyInfoNow then
+		getRemote("PartyInvite"):FireClient(targetPlayer, {
+			partyId = partyInfoNow.partyId,
+			leaderName = player.Name,
+		})
+	end
+end)
+
+getRemote("PartyAccept").OnServerEvent:Connect(function(player: Player, partyId: unknown)
+	if typeof(partyId) ~= "string" or not PartyManager then
+		return
+	end
+	PartyManager.joinParty(player, partyId :: string)
+end)
+
+getRemote("PartyLeave").OnServerEvent:Connect(function(player: Player)
+	if PartyManager then
+		PartyManager.leaveParty(player)
+	end
+end)
+
+print("[Hub] WARRANT: Case Closed hub server loaded successfully")
