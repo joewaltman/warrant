@@ -62,13 +62,13 @@ function TeleportManager.teleportToCase(players: { Player }, caseId: string)
 	end
 
 	local teleportOptions = Instance.new("TeleportOptions")
-	teleportOptions.ShouldReserveServer = false
+	teleportOptions.ReservedServerAccessCode = code
 	teleportOptions:SetTeleportData(teleportData)
 
 	-- Attempt teleport with retries
 	for attempt = 1, MAX_RETRIES do
 		local ok, err = pcall(function()
-			TeleportService:TeleportToPrivateServer(game.PlaceId, code, players, "", teleportData)
+			TeleportService:TeleportAsync(game.PlaceId, players, teleportOptions)
 		end)
 		if ok then
 			print("[TeleportManager] Teleporting", #players, "players to case", caseId)
@@ -97,7 +97,7 @@ function TeleportManager.teleportToHub(players: { Player })
 
 	for attempt = 1, MAX_RETRIES do
 		local ok, err = pcall(function()
-			TeleportService:Teleport(game.PlaceId, players)
+			TeleportService:TeleportAsync(game.PlaceId, players)
 		end)
 		if ok then
 			print("[TeleportManager] Teleporting", #players, "players back to hub")
