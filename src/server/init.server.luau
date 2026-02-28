@@ -91,6 +91,23 @@ local PrecinctBuilder = safeRequire(script.PrecinctBuilder)
 local StatsTracker = safeRequire(script.StatsTracker)
 local PartyManager = safeRequire(script.PartyManager)
 
+-- Studio fallback: load case-execution modules so cases can run locally
+local EvidenceSystem: any = nil
+local RaidController: any = nil
+local NPCBehavior: any = nil
+local CombatSystem: any = nil
+local ScoringSystem: any = nil
+local LayoutBuilder: any = nil
+if TeleportManager.isStudio() then
+	EvidenceSystem = safeRequire(script.EvidenceSystem)
+	RaidController = safeRequire(script.RaidController)
+	NPCBehavior = safeRequire(script.NPCBehavior)
+	CombatSystem = safeRequire(script.CombatSystem)
+	ScoringSystem = safeRequire(script.ScoringSystem)
+	LayoutBuilder = safeRequire(script.LayoutBuilder)
+	print("[Hub] Studio mode: case-execution modules loaded for local fallback")
+end
+
 print("[Hub] Server modules loaded")
 
 ------------------------------------------------------------------------
@@ -99,6 +116,7 @@ print("[Hub] Server modules loaded")
 local precinctModel: Model? = nil
 local caseBoardPart: Part? = nil
 local PRECINCT_SPAWN = Vector3.new(0, 5, -15)
+local CASE_BUILDING_OFFSET = Vector3.new(200, 0, 0) -- Studio fallback: cases spawn far from precinct
 
 if PrecinctBuilder then
 	precinctModel, caseBoardPart = PrecinctBuilder.build()
@@ -172,12 +190,82 @@ local function getRemote(name: string): RemoteEvent
 	return ReplicatedStorage:FindFirstChild(name) :: RemoteEvent
 end
 
+local function teleportPlayer(player: Player, position: Vector3)
+	local character = player.Character
+	if character then
+		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if rootPart then
+			rootPart.CFrame = CFrame.new(position)
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- STUDIO FALLBACK: Local raid completion callback
+------------------------------------------------------------------------
+local function onRaidCompleteLocal(player: Player)
+	if not RaidController or not CaseManager or not ScoringSystem then
+		return
+	end
+
+	local raid = RaidController.getActiveRaid(player)
+	local activeCase = CaseManager.getActiveCase(player)
+	if not raid or not activeCase then
+		return
+	end
+
+	local intel = if EvidenceSystem then EvidenceSystem.getPlayerIntel(player) else nil
+	local evidencePoints = if intel then intel.points else 0
+
+	CaseManager.setState(player, "Scoring")
+
+	local metrics = RaidController.endRaid(player)
+	if not metrics then
+		return
+	end
+
+	local result = ScoringSystem.calculateScore(
+		activeCase.caseData,
+		raid.intelTier,
+		evidencePoints,
+		metrics
+	)
+
+	ScoringSystem.presentScore(player, result)
+
+	if ProgressionSystem then
+		ProgressionSystem.awardXP(player, result.totalXP)
+		ProgressionSystem.recordCaseCompletion(player, activeCase.caseData.caseId, result.totalXP)
+	end
+
+	if StatsTracker then
+		StatsTracker.recordCaseStats(player, activeCase.caseData, result, metrics, raid.intelTier)
+	end
+
+	task.spawn(function()
+		task.wait(5)
+		CaseManager.completeCase(player, result.totalXP)
+
+		if EvidenceSystem then
+			EvidenceSystem.cleanup(player)
+			EvidenceSystem.cleanupCase(activeCase.caseData.caseId)
+		end
+		if RaidController then RaidController.cleanup(player) end
+		if NPCBehavior then NPCBehavior.cleanup() end
+
+		teleportPlayer(player, PRECINCT_SPAWN)
+	end)
+end
+
 ------------------------------------------------------------------------
 -- PLAYER JOIN / LEAVE
 ------------------------------------------------------------------------
 Players.PlayerAdded:Connect(function(player: Player)
 	if ProgressionSystem then
 		ProgressionSystem.loadPlayer(player)
+	end
+	if EvidenceSystem then
+		EvidenceSystem.initForPlayer(player)
 	end
 	print("[Hub] Player joined:", player.Name)
 end)
@@ -194,6 +282,10 @@ Players.PlayerRemoving:Connect(function(player: Player)
 		return
 	end
 
+	if CaseManager then CaseManager.onPlayerRemoving(player) end
+	if EvidenceSystem then EvidenceSystem.cleanup(player) end
+	if RaidController then RaidController.cleanup(player) end
+	if CombatSystem then CombatSystem.cleanup(player) end
 	if ProgressionSystem then ProgressionSystem.cleanup(player) end
 	if SyndicateMatch then SyndicateMatch.onPlayerRemoving(player) end
 	if AntiExploit then AntiExploit.cleanup(player) end
@@ -238,9 +330,210 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 		playersToTeleport = { player }
 	end
 
-	-- Teleport to a reserved case server
-	TeleportManager.teleportToCase(playersToTeleport, caseId :: string)
+	-- Teleport to a reserved case server (returns false in Studio)
+	local didTeleport = TeleportManager.teleportToCase(playersToTeleport, caseId :: string)
+
+	-- Studio fallback: run the case locally on this server
+	if not didTeleport and TeleportManager.isStudio() then
+		local layoutModel: Model? = nil
+		if LayoutBuilder and config.getLayout then
+			local layoutDef = config.getLayout()
+			layoutDef.origin = CASE_BUILDING_OFFSET
+			layoutModel = LayoutBuilder.build(layoutDef)
+			layoutModel.Parent = workspace
+		end
+
+		if CaseManager then
+			local loadOk, loadErr = CaseManager.loadCase(playersToTeleport, caseId :: string, layoutModel)
+			if not loadOk then
+				warn("[Hub] Studio case load failed:", loadErr)
+				if layoutModel then layoutModel:Destroy() end
+				return
+			end
+		end
+
+		if EvidenceSystem then
+			local evidenceModule = caseFolder:FindFirstChild("EvidenceMap")
+			if evidenceModule and evidenceModule:IsA("ModuleScript") then
+				local evMod = require(evidenceModule) :: any
+				if evMod.getEvidence then
+					local evidenceList = evMod.getEvidence()
+					for _, ev in evidenceList do
+						ev.position = ev.position + CASE_BUILDING_OFFSET
+					end
+					EvidenceSystem.loadEvidence(caseId :: string, evidenceList)
+
+					local positions = {}
+					for _, ev in evidenceList do
+						table.insert(positions, {
+							id = ev.id,
+							position = ev.position,
+							discoveryMethod = ev.discoveryMethod,
+						})
+					end
+					for _, p in playersToTeleport do
+						getRemote("EvidencePositions"):FireClient(p, positions)
+					end
+				end
+			end
+		end
+
+		if CombatSystem then
+			for _, p in playersToTeleport do
+				local armorBonus = if ProgressionSystem and ProgressionSystem.getPlayerLevel(p) >= 50 then 15 else 0
+				CombatSystem.initPlayer(p, armorBonus)
+			end
+		end
+
+		for _, p in playersToTeleport do
+			teleportPlayer(p, CASE_BUILDING_OFFSET + Vector3.new(0, 5, -20))
+		end
+	end
 end)
+
+------------------------------------------------------------------------
+-- STUDIO FALLBACK: Case lifecycle handlers (only active when running locally)
+------------------------------------------------------------------------
+if TeleportManager.isStudio() then
+	getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
+		if not AntiExploit or not AntiExploit.checkRateLimit(player, "breach") then
+			return
+		end
+		if not CaseManager or not EvidenceSystem or not RaidController then
+			return
+		end
+		local activeCase = CaseManager.getActiveCase(player)
+		if not activeCase or activeCase.state ~= "Investigating" then
+			return
+		end
+		local success, intelTier = EvidenceSystem.breach(player)
+		if not success then
+			return
+		end
+		CaseManager.setState(player, "Raiding")
+
+		local caseFolder = CaseManager.getCaseFolder(activeCase.caseData.caseId)
+		local npcConfigs: { Types.NPCSuspect } = {}
+		if caseFolder then
+			local npcModule = caseFolder:FindFirstChild("NPCConfig")
+			if npcModule and npcModule:IsA("ModuleScript") then
+				local npcMod = require(npcModule) :: any
+				if npcMod.getNPCs then
+					npcConfigs = npcMod.getNPCs()
+				end
+			end
+		end
+		for _, npc in npcConfigs do
+			npc.position = npc.position + CASE_BUILDING_OFFSET
+			if npc.fleeRoute then
+				for i, point in npc.fleeRoute do
+					npc.fleeRoute[i] = point + CASE_BUILDING_OFFSET
+				end
+			end
+		end
+		RaidController.startRaid(player, activeCase.caseData.caseId, intelTier, npcConfigs, function()
+			onRaidCompleteLocal(player)
+		end)
+		local raid = RaidController.getActiveRaid(player)
+		if raid and NPCBehavior then
+			for _, activeNPC in raid.npcs do
+				local npcInstance = NPCBehavior.spawnNPC(activeNPC.config, activeNPC.assignedBehavior)
+				activeNPC.model = npcInstance.model
+			end
+			NPCBehavior.alertAllOnBreach(player)
+		end
+	end)
+
+	getRemote("RequestInteract").OnServerEvent:Connect(function(player: Player)
+		if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then
+			return
+		end
+		if not CaseManager or not EvidenceSystem then
+			return
+		end
+		local activeCase = CaseManager.getActiveCase(player)
+		if not activeCase or activeCase.state ~= "Investigating" then
+			return
+		end
+		local character = player.Character
+		if not character then return end
+		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not rootPart then return end
+		local evidence = EvidenceSystem.getEvidence(activeCase.caseData.caseId)
+		local nearestId: string? = nil
+		local nearestDist = 15
+		for _, item in evidence do
+			local intel = EvidenceSystem.getPlayerIntel(player)
+			if intel and not intel.discoveredEvidence[item.id] then
+				local dist = (rootPart.Position - item.position).Magnitude
+				if dist < nearestDist then
+					nearestDist = dist
+					nearestId = item.id
+				end
+			end
+		end
+		if nearestId then
+			EvidenceSystem.discoverEvidence(player, activeCase.caseData.caseId, nearestId)
+		end
+	end)
+
+	getRemote("RequestFireWeapon").OnServerEvent:Connect(function(player: Player, origin: unknown, direction: unknown)
+		if typeof(origin) ~= "Vector3" or typeof(direction) ~= "Vector3" then return end
+		if not AntiExploit or not AntiExploit.checkRateLimit(player, "fireWeapon") then return end
+		if not AntiExploit.validateRayOrigin(player, origin :: Vector3) then return end
+		if not CombatSystem or not RaidController then return end
+		local result = CombatSystem.fireWeapon(player, origin :: Vector3, direction :: Vector3)
+		RaidController.recordShot(player)
+		if result.hit and result.isNPC and result.target and NPCBehavior then
+			local didHit, isDowned = NPCBehavior.damageNPC(result.target, result.damage)
+			if isDowned then
+				RaidController.recordTakedown(player, result.target, result.isNonLethal)
+			end
+		end
+		if result.isCollateral then
+			RaidController.recordCollateral(player)
+		end
+	end)
+
+	getRemote("RequestWeaponSwitch").OnServerEvent:Connect(function(player: Player, weapon: unknown)
+		if typeof(weapon) ~= "string" then return end
+		if ProgressionSystem and not ProgressionSystem.isToolUnlocked(player, weapon :: string) then return end
+		if CombatSystem then
+			CombatSystem.equipWeapon(player, weapon :: any)
+		end
+	end)
+
+	getRemote("RequestArrest").OnServerEvent:Connect(function(player: Player)
+		if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then return end
+		if not NPCBehavior or not RaidController then return end
+		local character = player.Character
+		if not character then return end
+		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not rootPart then return end
+		local allNPCs = NPCBehavior.getAllNPCs()
+		for id, _npc in allNPCs do
+			if NPCBehavior.isNPCInRange(id, rootPart.Position, 8) then
+				if NPCBehavior.arrestNPC(id) then
+					RaidController.recordTakedown(player, id, true)
+					local raid = RaidController.getActiveRaid(player)
+					if raid then
+						getRemote("SuspectArrested"):FireClient(player, {
+							arrested = raid.metrics.suspectsArrested,
+							total = raid.metrics.totalSuspects,
+						})
+					end
+					break
+				end
+			end
+		end
+	end)
+
+	getRemote("RequestMedkit").OnServerEvent:Connect(function(player: Player)
+		if CombatSystem then
+			CombatSystem.healPlayer(player)
+		end
+	end)
+end
 
 ------------------------------------------------------------------------
 -- SYNDICATE MODE
