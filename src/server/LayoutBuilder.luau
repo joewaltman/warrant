@@ -31,54 +31,54 @@ type PropPreset = {
 }
 
 local PROP_PRESETS: { [string]: PropPreset } = {
-	desk = { size = Vector3.new(5, 3, 3), color = Color3.fromRGB(120, 80, 50), material = Enum.Material.Wood },
-	chair = { size = Vector3.new(2, 3, 2), color = Color3.fromRGB(60, 60, 65), material = Enum.Material.SmoothPlastic },
-	table_round = { size = Vector3.new(4, 3, 4), color = Color3.fromRGB(120, 80, 50), material = Enum.Material.Wood },
-	shelf = { size = Vector3.new(6, 5, 1), color = Color3.fromRGB(110, 75, 45), material = Enum.Material.Wood },
-	crate = { size = Vector3.new(3, 3, 3), color = Color3.fromRGB(170, 140, 90), material = Enum.Material.Wood },
-	barrel = { size = Vector3.new(2, 3, 2), color = Color3.fromRGB(130, 130, 135), material = Enum.Material.Metal, shape = Enum.PartType.Cylinder },
-	computer = { size = Vector3.new(1.5, 1, 1), color = Color3.fromRGB(40, 40, 45), material = Enum.Material.SmoothPlastic },
-	filing_cabinet = { size = Vector3.new(2, 4, 2), color = Color3.fromRGB(130, 130, 135), material = Enum.Material.Metal },
-	couch = { size = Vector3.new(6, 3, 3), color = Color3.fromRGB(120, 40, 40), material = Enum.Material.Fabric },
-	bed = { size = Vector3.new(5, 2, 6), color = Color3.fromRGB(230, 230, 235), material = Enum.Material.Fabric },
-	counter = { size = Vector3.new(8, 3, 2), color = Color3.fromRGB(220, 220, 225), material = Enum.Material.Granite },
-	safe = { size = Vector3.new(2, 3, 2), color = Color3.fromRGB(70, 70, 75), material = Enum.Material.Metal },
-	tv = { size = Vector3.new(3, 2, 0.3), color = Color3.fromRGB(20, 20, 25), material = Enum.Material.SmoothPlastic },
-	lamp = { size = Vector3.new(1, 4, 1), color = Color3.fromRGB(230, 200, 140), material = Enum.Material.SmoothPlastic },
-	cover_low = { size = Vector3.new(4, 3, 2), color = Color3.fromRGB(100, 100, 105), material = Enum.Material.Concrete, tags = { "Cover" } },
-	cover_tall = { size = Vector3.new(2, 5, 2), color = Color3.fromRGB(100, 100, 105), material = Enum.Material.Concrete, tags = { "Cover" } },
+	desk = { size = Vector3.new(10, 6, 6), color = Color3.fromRGB(120, 80, 50), material = Enum.Material.Wood },
+	chair = { size = Vector3.new(4, 6, 4), color = Color3.fromRGB(60, 60, 65), material = Enum.Material.SmoothPlastic },
+	table_round = { size = Vector3.new(8, 6, 8), color = Color3.fromRGB(120, 80, 50), material = Enum.Material.Wood },
+	shelf = { size = Vector3.new(12, 10, 2), color = Color3.fromRGB(110, 75, 45), material = Enum.Material.Wood },
+	crate = { size = Vector3.new(6, 6, 6), color = Color3.fromRGB(170, 140, 90), material = Enum.Material.Wood },
+	barrel = { size = Vector3.new(4, 6, 4), color = Color3.fromRGB(130, 130, 135), material = Enum.Material.Metal, shape = Enum.PartType.Cylinder },
+	computer = { size = Vector3.new(3, 2, 2), color = Color3.fromRGB(40, 40, 45), material = Enum.Material.SmoothPlastic },
+	filing_cabinet = { size = Vector3.new(4, 8, 4), color = Color3.fromRGB(130, 130, 135), material = Enum.Material.Metal },
+	couch = { size = Vector3.new(12, 6, 6), color = Color3.fromRGB(120, 40, 40), material = Enum.Material.Fabric },
+	bed = { size = Vector3.new(10, 4, 12), color = Color3.fromRGB(230, 230, 235), material = Enum.Material.Fabric },
+	counter = { size = Vector3.new(16, 6, 4), color = Color3.fromRGB(220, 220, 225), material = Enum.Material.Granite },
+	safe = { size = Vector3.new(4, 6, 4), color = Color3.fromRGB(70, 70, 75), material = Enum.Material.Metal },
+	tv = { size = Vector3.new(6, 4, 0.6), color = Color3.fromRGB(20, 20, 25), material = Enum.Material.SmoothPlastic },
+	lamp = { size = Vector3.new(2, 8, 2), color = Color3.fromRGB(230, 200, 140), material = Enum.Material.SmoothPlastic },
+	cover_low = { size = Vector3.new(8, 6, 4), color = Color3.fromRGB(100, 100, 105), material = Enum.Material.Concrete, tags = { "Cover" } },
+	cover_tall = { size = Vector3.new(4, 10, 4), color = Color3.fromRGB(100, 100, 105), material = Enum.Material.Concrete, tags = { "Cover" } },
 
 	-- Bathroom / Utility
-	bathtub = { size = Vector3.new(6, 2, 3), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.Marble },
-	toilet = { size = Vector3.new(2, 2.5, 2), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.SmoothPlastic },
-	sink = { size = Vector3.new(2, 3, 1.5), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.SmoothPlastic },
-	washer_dryer = { size = Vector3.new(3, 3, 3), color = Color3.fromRGB(220, 220, 225), material = Enum.Material.Metal },
+	bathtub = { size = Vector3.new(12, 4, 6), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.Marble },
+	toilet = { size = Vector3.new(4, 5, 4), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.SmoothPlastic },
+	sink = { size = Vector3.new(4, 6, 3), color = Color3.fromRGB(240, 240, 245), material = Enum.Material.SmoothPlastic },
+	washer_dryer = { size = Vector3.new(6, 6, 6), color = Color3.fromRGB(220, 220, 225), material = Enum.Material.Metal },
 
 	-- Kitchen
-	fridge = { size = Vector3.new(3, 6, 3), color = Color3.fromRGB(210, 210, 215), material = Enum.Material.Metal },
-	stove = { size = Vector3.new(3, 3, 3), color = Color3.fromRGB(50, 50, 55), material = Enum.Material.Metal },
+	fridge = { size = Vector3.new(6, 12, 6), color = Color3.fromRGB(210, 210, 215), material = Enum.Material.Metal },
+	stove = { size = Vector3.new(6, 6, 6), color = Color3.fromRGB(50, 50, 55), material = Enum.Material.Metal },
 
 	-- Decor
-	bookshelf = { size = Vector3.new(4, 6, 1.5), color = Color3.fromRGB(100, 65, 35), material = Enum.Material.Wood },
-	potted_plant = { size = Vector3.new(1.5, 3, 1.5), color = Color3.fromRGB(60, 120, 40), material = Enum.Material.Grass },
-	trash_can = { size = Vector3.new(1.5, 2, 1.5), color = Color3.fromRGB(80, 80, 85), material = Enum.Material.Metal, shape = Enum.PartType.Cylinder },
-	rug = { size = Vector3.new(6, 0.2, 4), color = Color3.fromRGB(140, 60, 60), material = Enum.Material.Fabric },
-	picture_frame = { size = Vector3.new(2, 2, 0.2), color = Color3.fromRGB(120, 80, 40), material = Enum.Material.Wood },
-	mirror = { size = Vector3.new(2, 3, 0.2), color = Color3.fromRGB(200, 220, 240), material = Enum.Material.Glass },
-	window_frame = { size = Vector3.new(4, 4, 0.3), color = Color3.fromRGB(180, 200, 220), material = Enum.Material.Glass },
+	bookshelf = { size = Vector3.new(8, 12, 3), color = Color3.fromRGB(100, 65, 35), material = Enum.Material.Wood },
+	potted_plant = { size = Vector3.new(3, 6, 3), color = Color3.fromRGB(60, 120, 40), material = Enum.Material.Grass },
+	trash_can = { size = Vector3.new(3, 4, 3), color = Color3.fromRGB(80, 80, 85), material = Enum.Material.Metal, shape = Enum.PartType.Cylinder },
+	rug = { size = Vector3.new(12, 0.4, 8), color = Color3.fromRGB(140, 60, 60), material = Enum.Material.Fabric },
+	picture_frame = { size = Vector3.new(4, 4, 0.4), color = Color3.fromRGB(120, 80, 40), material = Enum.Material.Wood },
+	mirror = { size = Vector3.new(4, 6, 0.4), color = Color3.fromRGB(200, 220, 240), material = Enum.Material.Glass },
+	window_frame = { size = Vector3.new(8, 8, 0.6), color = Color3.fromRGB(180, 200, 220), material = Enum.Material.Glass },
 
 	-- Commercial
-	vending_machine = { size = Vector3.new(3, 6, 2), color = Color3.fromRGB(200, 50, 50), material = Enum.Material.Metal },
-	register = { size = Vector3.new(2, 1.5, 2), color = Color3.fromRGB(60, 60, 65), material = Enum.Material.Metal },
+	vending_machine = { size = Vector3.new(6, 12, 4), color = Color3.fromRGB(200, 50, 50), material = Enum.Material.Metal },
+	register = { size = Vector3.new(4, 3, 4), color = Color3.fromRGB(60, 60, 65), material = Enum.Material.Metal },
 
 	-- Outdoor
-	dumpster = { size = Vector3.new(5, 4, 3), color = Color3.fromRGB(60, 90, 60), material = Enum.Material.Metal },
-	fire_hydrant = { size = Vector3.new(1.5, 2.5, 1.5), color = Color3.fromRGB(200, 40, 40), material = Enum.Material.Metal },
-	mailbox = { size = Vector3.new(1.5, 3, 1), color = Color3.fromRGB(40, 60, 140), material = Enum.Material.Metal },
-	fence_section = { size = Vector3.new(8, 4, 0.5), color = Color3.fromRGB(200, 190, 170), material = Enum.Material.Wood },
-	streetlight = { size = Vector3.new(0.5, 12, 0.5), color = Color3.fromRGB(80, 80, 85), material = Enum.Material.Metal },
-	bench = { size = Vector3.new(5, 2, 2), color = Color3.fromRGB(100, 65, 35), material = Enum.Material.Wood },
-	tree = { size = Vector3.new(6, 6, 6), color = Color3.fromRGB(40, 100, 30), material = Enum.Material.Grass, shape = Enum.PartType.Ball },
+	dumpster = { size = Vector3.new(10, 8, 6), color = Color3.fromRGB(60, 90, 60), material = Enum.Material.Metal },
+	fire_hydrant = { size = Vector3.new(3, 5, 3), color = Color3.fromRGB(200, 40, 40), material = Enum.Material.Metal },
+	mailbox = { size = Vector3.new(3, 6, 2), color = Color3.fromRGB(40, 60, 140), material = Enum.Material.Metal },
+	fence_section = { size = Vector3.new(16, 8, 1), color = Color3.fromRGB(200, 190, 170), material = Enum.Material.Wood },
+	streetlight = { size = Vector3.new(1, 24, 1), color = Color3.fromRGB(80, 80, 85), material = Enum.Material.Metal },
+	bench = { size = Vector3.new(10, 4, 4), color = Color3.fromRGB(100, 65, 35), material = Enum.Material.Wood },
+	tree = { size = Vector3.new(12, 12, 12), color = Color3.fromRGB(40, 100, 30), material = Enum.Material.Grass, shape = Enum.PartType.Ball },
 }
 
 ------------------------------------------------------------------------
@@ -272,7 +272,7 @@ local function buildProp(parent: Model, prop: PropDef, origin: Vector3)
 		local light = Instance.new("PointLight")
 		light.Brightness = 0.8
 		light.Color = Color3.fromRGB(255, 230, 180)
-		light.Range = 16
+		light.Range = 32
 		light.Parent = part
 	end
 
@@ -281,7 +281,7 @@ local function buildProp(parent: Model, prop: PropDef, origin: Vector3)
 		local light = Instance.new("PointLight")
 		light.Brightness = 1.2
 		light.Color = Color3.fromRGB(255, 240, 200)
-		light.Range = 30
+		light.Range = 60
 		light.Parent = part
 	end
 
@@ -289,8 +289,8 @@ local function buildProp(parent: Model, prop: PropDef, origin: Vector3)
 	if prop.preset == "tree" then
 		local trunk = Instance.new("Part")
 		trunk.Name = "Trunk"
-		trunk.Size = Vector3.new(1, 6, 1)
-		trunk.CFrame = CFrame.new(part.Position - Vector3.new(0, size.Y / 2 + 3, 0))
+		trunk.Size = Vector3.new(2, 12, 2)
+		trunk.CFrame = CFrame.new(part.Position - Vector3.new(0, size.Y / 2 + 6, 0))
 		trunk.Anchored = true
 		trunk.Color = Color3.fromRGB(100, 65, 35)
 		trunk.Material = Enum.Material.Wood
@@ -407,7 +407,7 @@ function LayoutBuilder.build(layoutDef: LayoutDef): Model
 	local groundMat = if theme then theme.groundMaterial else Enum.Material.Grass
 	createPart(model, "Ground",
 		origin + Vector3.new(0, -0.5, 0),
-		Vector3.new(120, 1, 120),
+		Vector3.new(240, 1, 240),
 		groundColor, groundMat)
 
 	-- Set primary part
