@@ -23,7 +23,7 @@ local CaseBoardUI = {}
 
 local screenGui: ScreenGui? = nil
 local boardFrame: Frame? = nil
-local cardContainer: Frame? = nil
+local cardContainer: ScrollingFrame? = nil
 local filterFrame: Frame? = nil
 
 local allCases: { CaseData } = {}
@@ -282,13 +282,17 @@ local function createBoard()
 		end)
 	end
 
-	-- Card container with grid layout
-	cardContainer = Instance.new("Frame")
+	-- Card container with grid layout (scrollable)
+	cardContainer = Instance.new("ScrollingFrame")
 	cardContainer.Name = "Cards"
 	cardContainer.Size = UDim2.new(1, -20, 1, -100)
 	cardContainer.Position = UDim2.new(0, 10, 0, 96)
 	cardContainer.BackgroundTransparency = 1
-	cardContainer.ClipsDescendants = true
+	cardContainer.BorderSizePixel = 0
+	cardContainer.ScrollBarThickness = 6
+	cardContainer.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 130)
+	cardContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	cardContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
 	cardContainer.Parent = boardFrame
 
 	local gridLayout = Instance.new("UIGridLayout")

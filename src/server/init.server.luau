@@ -30,6 +30,7 @@ local ALL_REMOTES = {
 	"RequestProfileData", "ProfileDataLoaded",
 	"EvidencePositions",
 	"TutorialProgress",
+	"NPCFired", "SuspectArrested",
 }
 
 for _, name in ALL_REMOTES do
@@ -112,6 +113,43 @@ else
 	platform.Color = Color3.fromRGB(100, 100, 100)
 	platform.Parent = workspace
 	warn("[Server] PrecinctBuilder failed, using fallback spawn")
+end
+
+------------------------------------------------------------------------
+-- STEP 4B: AMBIENT LIGHTING
+------------------------------------------------------------------------
+do
+	local Lighting = game:GetService("Lighting")
+	Lighting.Ambient = Color3.fromRGB(40, 40, 50)
+	Lighting.OutdoorAmbient = Color3.fromRGB(60, 60, 70)
+	Lighting.Brightness = 0.5
+	Lighting.ClockTime = 21 -- nighttime (9 PM)
+	Lighting.FogEnd = 500
+	Lighting.FogColor = Color3.fromRGB(20, 20, 30)
+
+	local atmosphere = Instance.new("Atmosphere")
+	atmosphere.Density = 0.3
+	atmosphere.Offset = 0.25
+	atmosphere.Color = Color3.fromRGB(40, 50, 80)
+	atmosphere.Decay = Color3.fromRGB(30, 30, 40)
+	atmosphere.Glare = 0
+	atmosphere.Haze = 2
+	atmosphere.Parent = Lighting
+
+	local colorCorrection = Instance.new("ColorCorrectionEffect")
+	colorCorrection.Brightness = -0.05
+	colorCorrection.Contrast = 0.15
+	colorCorrection.Saturation = -0.1
+	colorCorrection.TintColor = Color3.fromRGB(220, 230, 255)
+	colorCorrection.Parent = Lighting
+
+	local bloom = Instance.new("BloomEffect")
+	bloom.Intensity = 0.3
+	bloom.Size = 24
+	bloom.Threshold = 2
+	bloom.Parent = Lighting
+
+	print("[Server] Ambient lighting configured")
 end
 
 ------------------------------------------------------------------------
@@ -256,13 +294,19 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 		return
 	end
 
-	-- Initialize evidence
+	-- Initialize evidence (offset positions so server-side comparisons work)
 	if EvidenceSystem then
 		local evidenceModule = caseFolder:FindFirstChild("EvidenceMap")
 		if evidenceModule and evidenceModule:IsA("ModuleScript") then
 			local evMod = require(evidenceModule) :: any
 			if evMod.getEvidence then
 				local evidenceList = evMod.getEvidence()
+
+				-- Offset evidence positions to match building location
+				for _, ev in evidenceList do
+					ev.position = ev.position + CASE_BUILDING_OFFSET
+				end
+
 				EvidenceSystem.loadEvidence(caseId :: string, evidenceList)
 
 				-- Send evidence positions to client for visual markers
@@ -270,7 +314,7 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 				for _, ev in evidenceList do
 					table.insert(positions, {
 						id = ev.id,
-						position = ev.position + CASE_BUILDING_OFFSET,
+						position = ev.position,
 						discoveryMethod = ev.discoveryMethod,
 					})
 				end
@@ -345,6 +389,8 @@ getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
 			local npcInstance = NPCBehavior.spawnNPC(activeNPC.config, activeNPC.assignedBehavior)
 			activeNPC.model = npcInstance.model
 		end
+		-- Alert all NPCs on breach with staggered delay
+		NPCBehavior.alertAllOnBreach(player)
 	end
 end)
 
@@ -470,10 +516,19 @@ getRemote("RequestArrest").OnServerEvent:Connect(function(player: Player)
 	end
 
 	local allNPCs = NPCBehavior.getAllNPCs()
-	for id, npc in allNPCs do
+	for id, _npc in allNPCs do
 		if NPCBehavior.isNPCInRange(id, rootPart.Position, 8) then
 			if NPCBehavior.arrestNPC(id) then
 				RaidController.recordTakedown(player, id, true)
+
+				-- Fire SuspectArrested to client for HUD update
+				local raid = RaidController.getActiveRaid(player)
+				if raid then
+					getRemote("SuspectArrested"):FireClient(player, {
+						arrested = raid.metrics.suspectsArrested,
+						total = raid.metrics.totalSuspects,
+					})
+				end
 				break
 			end
 		end

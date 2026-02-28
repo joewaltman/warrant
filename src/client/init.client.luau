@@ -49,6 +49,7 @@ local ScoreScreen = require(script.ScoreScreen)
 local ProfileUI = require(script.ProfileUI)
 local EvidenceVisuals = require(script.EvidenceVisuals)
 local TutorialOverlay = require(script.TutorialOverlay)
+local CombatFeedback = require(script.CombatFeedback)
 
 print("[Client] Client modules loaded")
 
@@ -65,6 +66,7 @@ ScoreScreen.init()
 ProfileUI.init()
 EvidenceVisuals.init()
 TutorialOverlay.init()
+CombatFeedback.init()
 
 UIController.registerScreen("CaseBoard", CaseBoardUI)
 UIController.registerScreen("Investigation", IntelMeterHUD)
@@ -219,13 +221,14 @@ if caseStateChanged then
 	end)
 end
 
--- Breach -> switch to raid HUD
+-- Breach -> switch to raid HUD + show combat feedback
 local breachInitiated = getRemote("BreachInitiated")
 if breachInitiated then
 	breachInitiated.OnClientEvent:Connect(function(data: any)
 		InputHandler.setMode("Raid")
 		IntelMeterHUD.hide()
 		RaidHUD.show()
+		CombatFeedback.show()
 		TutorialOverlay.onBreach()
 		-- Slight delay for raid tutorial step
 		task.delay(2, function()
@@ -240,6 +243,7 @@ if raidEnded then
 	raidEnded.OnClientEvent:Connect(function(data: any)
 		InputHandler.disable()
 		RaidHUD.hide()
+		CombatFeedback.hide()
 	end)
 end
 
@@ -251,6 +255,7 @@ if caseCompleted then
 		IntelMeterHUD.reset()
 		IntelMeterHUD.hide()
 		RaidHUD.hide()
+		CombatFeedback.hide()
 		ScoreScreen.hide()
 		EvidenceVisuals.reset()
 		caseBoardBtn.Visible = true
@@ -319,6 +324,44 @@ if matchFound then
 	matchFound.OnClientEvent:Connect(function(data: any)
 		InputHandler.setMode("Syndicate")
 		InputHandler.enable()
+	end)
+end
+
+------------------------------------------------------------------------
+-- STEP 7: COMBAT FEEDBACK WIRING
+------------------------------------------------------------------------
+
+-- NPC fired at player -> show muzzle flash
+local npcFired = getRemote("NPCFired")
+if npcFired then
+	npcFired.OnClientEvent:Connect(function(data: any)
+		CombatFeedback.onEnemyFired(data)
+	end)
+end
+
+-- Player takes damage -> screen flash
+local playerHealthChanged = getRemote("PlayerHealthChanged")
+if playerHealthChanged then
+	playerHealthChanged.OnClientEvent:Connect(function(data: any)
+		CombatFeedback.onDamageTaken(data)
+	end)
+end
+
+-- Weapon equipped -> update weapon HUD highlight
+local weaponEquipped = getRemote("WeaponEquipped")
+if weaponEquipped then
+	weaponEquipped.OnClientEvent:Connect(function(weapon: string)
+		CombatFeedback.setActiveWeapon(weapon)
+	end)
+end
+
+-- Suspect arrested -> update RaidHUD counter
+local suspectArrested = getRemote("SuspectArrested")
+if suspectArrested then
+	suspectArrested.OnClientEvent:Connect(function(data: any)
+		if data and data.arrested and data.total then
+			RaidHUD.updateSuspects(data.arrested, data.total)
+		end
 	end)
 end
 

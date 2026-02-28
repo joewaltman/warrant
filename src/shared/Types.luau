@@ -45,6 +45,7 @@ export type NPCSuspect = {
 	fleeRoute: { Vector3 }?,
 	weapon: string?,
 	health: number,
+	difficulty: number?,
 }
 
 export type IntelTierConfig = {

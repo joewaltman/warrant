@@ -3,6 +3,7 @@
 -- Client-side raid phase HUD: health bar, weapon selector, suspect tracker, minimap overlay
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
 local LocalPlayer = Players.LocalPlayer
@@ -26,6 +27,7 @@ local minimapFrame: Frame? = nil
 local currentHealth = 100
 local maxHealth = 100
 local raidStartTime = 0
+local timerConnection: RBXScriptConnection? = nil
 
 local WEAPON_DISPLAY = {
 	Taser = { name = "Taser", color = Color3.fromRGB(100, 200, 255) },
@@ -233,12 +235,30 @@ function RaidHUD.show()
 	if screenGui then
 		screenGui.Enabled = true
 		raidStartTime = tick()
+
+		-- Start timer heartbeat
+		if timerConnection then
+			timerConnection:Disconnect()
+		end
+		timerConnection = RunService.Heartbeat:Connect(function()
+			if not timerLabel then
+				return
+			end
+			local elapsed = math.floor(tick() - raidStartTime)
+			local minutes = math.floor(elapsed / 60)
+			local seconds = elapsed % 60
+			timerLabel.Text = string.format("%d:%02d", minutes, seconds)
+		end)
 	end
 end
 
 function RaidHUD.hide()
 	if screenGui then
 		screenGui.Enabled = false
+	end
+	if timerConnection then
+		timerConnection:Disconnect()
+		timerConnection = nil
 	end
 end
 

@@ -43,6 +43,7 @@ local function createHUD()
 	screenGui.Name = "IntelMeterHUD"
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Enabled = false
 	screenGui.Parent = PlayerGui
 
 	-- Main container
