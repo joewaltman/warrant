@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Types"))
+local PlaceRegistry = require(Shared:WaitForChild("PlaceRegistry"))
 
 type TeleportData = Types.TeleportData
 
@@ -38,6 +39,13 @@ function TeleportManager.isReservedServer(): boolean
 end
 
 ------------------------------------------------------------------------
+-- CASE SERVER CHECK (place-based)
+------------------------------------------------------------------------
+function TeleportManager.isCaseServer(): boolean
+	return PlaceRegistry.isCasePlace()
+end
+
+------------------------------------------------------------------------
 -- TELEPORT TO CASE (hub → reserved server)
 -- In Studio, stores teleport data locally and returns false so the
 -- caller can fall back to running the case on the same server.
@@ -59,11 +67,17 @@ function TeleportManager.teleportToCase(players: { Player }, caseId: string): bo
 		partyMembers = memberIds,
 	}
 
-	-- Studio: TeleportService doesn't work, fall back to local case
-	if IS_STUDIO then
-		print("[TeleportManager] Studio detected, running case locally")
-		for _, p in players do
-			studioTeleportData[p.UserId] = teleportData
+	-- Look up the dedicated place for this case
+	local placeId = PlaceRegistry.getPlaceId(caseId)
+	if not placeId or placeId == 0 then
+		-- No published placeId — fall back to local (Studio / dev)
+		if IS_STUDIO then
+			print("[TeleportManager] Studio detected, running case locally")
+			for _, p in players do
+				studioTeleportData[p.UserId] = teleportData
+			end
+		else
+			warn("[TeleportManager] No placeId configured for case", caseId, "— cannot teleport")
 		end
 		return false
 	end
@@ -73,28 +87,17 @@ function TeleportManager.teleportToCase(players: { Player }, caseId: string): bo
 		teleportingPlayers[p.UserId] = true
 	end
 
-	local success, code = pcall(function()
-		return TeleportService:ReserveServer(game.PlaceId)
-	end)
-	if not success or not code then
-		warn("[TeleportManager] ReserveServer failed:", code)
-		for _, p in players do
-			teleportingPlayers[p.UserId] = nil
-		end
-		return false
-	end
-
 	local teleportOptions = Instance.new("TeleportOptions")
-	teleportOptions.ReservedServerAccessCode = code
+	teleportOptions.ShouldReserveServer = true
 	teleportOptions:SetTeleportData(teleportData)
 
 	-- Attempt teleport with retries
 	for attempt = 1, MAX_RETRIES do
 		local ok, err = pcall(function()
-			TeleportService:TeleportAsync(game.PlaceId, players, teleportOptions)
+			TeleportService:TeleportAsync(placeId, players, teleportOptions)
 		end)
 		if ok then
-			print("[TeleportManager] Teleporting", #players, "players to case", caseId)
+			print("[TeleportManager] Teleporting", #players, "players to case", caseId, "placeId", placeId)
 			return true
 		end
 		warn("[TeleportManager] Teleport attempt", attempt, "failed:", err)
@@ -125,9 +128,15 @@ function TeleportManager.teleportToHub(players: { Player })
 		return
 	end
 
+	local hubPlaceId = PlaceRegistry.HUB_PLACE_ID
+	if hubPlaceId == 0 then
+		warn("[TeleportManager] HUB_PLACE_ID is not configured, cannot teleport to hub")
+		return
+	end
+
 	for attempt = 1, MAX_RETRIES do
 		local ok, err = pcall(function()
-			TeleportService:TeleportAsync(game.PlaceId, players)
+			TeleportService:TeleportAsync(hubPlaceId, players)
 		end)
 		if ok then
 			print("[TeleportManager] Teleporting", #players, "players back to hub")

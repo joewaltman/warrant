@@ -1,7 +1,7 @@
 --!strict
 -- CaseServerInit | WARRANT: Case Closed
--- Case server entry point — runs when isReservedServer() is true.
--- Builds the case at origin, wires remote handlers, manages lifecycle.
+-- Case server entry point — runs when PlaceRegistry.isCasePlace() is true.
+-- Map is pre-built in each case place; wires remote handlers, manages lifecycle.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Types"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local PlaceRegistry = require(Shared:WaitForChild("PlaceRegistry"))
 
 type TeleportData = Types.TeleportData
 
@@ -44,7 +45,7 @@ end
 -- MAIN START
 ------------------------------------------------------------------------
 function CaseServerInit.start()
-	print("[CaseServer] Reserved server starting...")
+	print("[CaseServer] Case place server starting...")
 
 	--------------------------------------------------------------------
 	-- STEP 1: CREATE ALL REMOTE EVENTS (same list as hub)
@@ -80,13 +81,7 @@ function CaseServerInit.start()
 		end
 	end
 
-	-- Set CaseServerMode flag so client can detect reserved server
-	local modeFlag = Instance.new("BoolValue")
-	modeFlag.Name = "CaseServerMode"
-	modeFlag.Value = true
-	modeFlag.Parent = ReplicatedStorage
-
-	print("[CaseServer] RemoteEvents created, CaseServerMode flag set")
+	print("[CaseServer] RemoteEvents created")
 
 	--------------------------------------------------------------------
 	-- STEP 2: LOAD SERVER MODULES
@@ -100,7 +95,6 @@ function CaseServerInit.start()
 	local ScoringSystem = safeRequire(script.Parent.ScoringSystem)
 	local ProgressionSystem = safeRequire(script.Parent.ProgressionSystem)
 	local AntiExploit = safeRequire(script.Parent.AntiExploit)
-	local LayoutBuilder = safeRequire(script.Parent.LayoutBuilder)
 	local StatsTracker = safeRequire(script.Parent.StatsTracker)
 
 	print("[CaseServer] Server modules loaded")
@@ -143,9 +137,14 @@ function CaseServerInit.start()
 	--------------------------------------------------------------------
 	-- STEP 4: CASE STATE
 	--------------------------------------------------------------------
-	local caseId: string? = nil
+	local caseId: string? = PlaceRegistry.getCaseIdForCurrentPlace()
+	if not caseId then
+		warn("[CaseServer] This place is not mapped to any caseId in PlaceRegistry")
+		return
+	end
+	print("[CaseServer] Case place detected, caseId:", caseId)
+
 	local caseLoaded = false
-	local layoutModel: Model? = nil
 	local casePlayers: { Player } = {}
 	local CASE_ORIGIN = Vector3.new(0, 0, 0)
 
@@ -223,46 +222,35 @@ function CaseServerInit.start()
 	--------------------------------------------------------------------
 	-- STEP 6: LOAD CASE FOR A SET OF PLAYERS
 	--------------------------------------------------------------------
-	local function loadCaseForPlayers(targetCaseId: string, players: { Player })
+	local function loadCaseForPlayers(players: { Player })
 		if caseLoaded then
 			return
 		end
 		caseLoaded = true
-		caseId = targetCaseId
 		casePlayers = players
 
-		local caseFolder = if CaseManager then CaseManager.getCaseFolder(targetCaseId) else nil
+		local caseFolder = if CaseManager then CaseManager.getCaseFolder(caseId :: string) else nil
 		if not caseFolder then
-			warn("[CaseServer] Case folder not found:", targetCaseId)
+			warn("[CaseServer] Case folder not found:", caseId)
 			return
 		end
 
 		local configModule = caseFolder:FindFirstChild("CaseConfig") :: ModuleScript?
 		if not configModule then
-			warn("[CaseServer] CaseConfig not found for:", targetCaseId)
+			warn("[CaseServer] CaseConfig not found for:", caseId)
 			return
 		end
 
 		local config = require(configModule) :: any
 		local caseData = config.getData()
 
-		-- Build layout at origin (no offset needed in reserved server)
-		if LayoutBuilder and config.getLayout then
-			local layoutDef = config.getLayout()
-			layoutDef.origin = CASE_ORIGIN
-			layoutModel = LayoutBuilder.build(layoutDef)
-			layoutModel.Parent = workspace
-		end
+		-- Map is pre-built in this place — no LayoutBuilder needed
 
 		-- Load case for all players (party)
 		if CaseManager then
-			local success, err = CaseManager.loadCase(players, targetCaseId, layoutModel)
+			local success, err = CaseManager.loadCase(players, caseId :: string, nil)
 			if not success then
 				warn("[CaseServer] Case load failed:", err)
-				if layoutModel then
-					layoutModel:Destroy()
-					layoutModel = nil
-				end
 				return
 			end
 		end
@@ -275,7 +263,7 @@ function CaseServerInit.start()
 				if evMod.getEvidence then
 					local evidenceList = evMod.getEvidence()
 					-- No offset needed — case is at origin
-					EvidenceSystem.loadEvidence(targetCaseId, evidenceList)
+					EvidenceSystem.loadEvidence(caseId :: string, evidenceList)
 
 					local positions = {}
 					for _, ev in evidenceList do
@@ -320,20 +308,24 @@ function CaseServerInit.start()
 			EvidenceSystem.initForPlayer(player)
 		end
 
-		-- Read teleport data and load case
+		-- Read teleport data for party info; validate caseId matches this place
 		local teleportData = TeleportManager.getTeleportData(player)
-		if teleportData and teleportData.caseId and not caseLoaded then
+		if teleportData and teleportData.caseId and teleportData.caseId ~= caseId then
+			warn("[CaseServer] Player", player.Name, "arrived with mismatched caseId:", teleportData.caseId, "expected:", caseId)
+		end
+
+		if not caseLoaded then
 			-- Small delay to let other party members connect
 			task.wait(2)
 			local allPlayers = Players:GetPlayers()
-			loadCaseForPlayers(teleportData.caseId, allPlayers)
+			loadCaseForPlayers(allPlayers)
 		elseif caseLoaded and caseId then
 			-- Late joiner (party member who arrived after case loaded)
 			-- Add them to the existing case
 			if CaseManager then
 				local caseFolder = CaseManager.getCaseFolder(caseId)
 				if caseFolder then
-					CaseManager.loadCase({ player }, caseId, layoutModel)
+					CaseManager.loadCase({ player }, caseId, nil)
 				end
 			end
 			if CombatSystem then
@@ -599,7 +591,7 @@ function CaseServerInit.start()
 		end
 	end)
 
-	print("[CaseServer] Reserved server initialized, waiting for players...")
+	print("[CaseServer] Case place server initialized, waiting for players...")
 end
 
 return CaseServerInit

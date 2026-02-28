@@ -21,6 +21,7 @@ end
 
 local Types = require(Shared:WaitForChild("Types"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local PlaceRegistry = require(Shared:WaitForChild("PlaceRegistry"))
 
 print("[Client] Shared modules loaded")
 
@@ -79,7 +80,7 @@ print("[Client] UI initialized")
 ------------------------------------------------------------------------
 -- STEP 5: DETECT SERVER MODE (case server vs hub)
 ------------------------------------------------------------------------
-local isCaseServer = ReplicatedStorage:FindFirstChild("CaseServerMode") ~= nil
+local isCaseServer = PlaceRegistry.isCasePlace()
 
 ------------------------------------------------------------------------
 -- STEP 5B: PERSISTENT CASE BOARD BUTTON (hub only)

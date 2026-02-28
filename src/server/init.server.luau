@@ -9,11 +9,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 print("[Server] WARRANT: Case Closed loading...")
 
 ------------------------------------------------------------------------
--- EARLY BRANCH: RESERVED SERVER → CASE SERVER
+-- EARLY BRANCH: CASE PLACE → CASE SERVER
 ------------------------------------------------------------------------
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local PlaceRegistry = require(Shared:WaitForChild("PlaceRegistry"))
 local TeleportManager = require(script.TeleportManager)
 
-if TeleportManager.isReservedServer() then
+if PlaceRegistry.isCasePlace() then
 	-- CASE SERVER: delegate entirely to CaseServerInit
 	require(script.CaseServerInit).start()
 	return
@@ -65,7 +67,6 @@ print("[Hub] RemoteEvents created")
 ------------------------------------------------------------------------
 -- STEP 2: LOAD SHARED MODULES
 ------------------------------------------------------------------------
-local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(Shared:WaitForChild("Types"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
