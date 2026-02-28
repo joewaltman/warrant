@@ -5,52 +5,28 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Wait for shared modules
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Types = require(Shared:WaitForChild("Types"))
-local GameConfig = require(Shared:WaitForChild("GameConfig"))
-
--- Server modules
-local CaseManager = require(script.CaseManager)
-local EvidenceSystem = require(script.EvidenceSystem)
-local RaidController = require(script.RaidController)
-local NPCBehavior = require(script.NPCBehavior)
-local CombatSystem = require(script.CombatSystem)
-local ScoringSystem = require(script.ScoringSystem)
-local ProgressionSystem = require(script.ProgressionSystem)
-local SyndicateMatch = require(script.SyndicateMatch)
-local AntiExploit = require(script.AntiExploit)
-local LayoutBuilder = require(script.LayoutBuilder)
-
 print("[Server] WARRANT: Case Closed loading...")
 
 ------------------------------------------------------------------------
--- CENTRAL REMOTE EVENT REGISTRY
--- All RemoteEvents are created here, ONCE. Modules look them up by name.
+-- STEP 1: CREATE ALL REMOTE EVENTS FIRST (before anything else)
+-- This prevents client WaitForChild hangs if module loads fail.
 ------------------------------------------------------------------------
 local ALL_REMOTES = {
-	-- Client -> Server requests
 	"RequestCase", "RequestBreach", "RequestInteract",
 	"RequestFireWeapon", "RequestWeaponSwitch", "RequestArrest",
 	"RequestMedkit", "RequestIdentify",
 	"JoinSyndicateQueue", "LeaveSyndicateQueue",
-	-- Server -> Client notifications (Case)
 	"CaseLoaded", "CaseStateChanged", "CaseCompleted", "CaseAbandoned",
-	-- Server -> Client notifications (Evidence / Intel)
 	"IntelUpdated", "IntelTierChanged", "BreachInitiated",
-	-- Server -> Client notifications (Raid)
 	"RaidStarted", "RaidEnded",
-	-- Server -> Client notifications (Combat)
 	"WeaponEquipped", "PlayerHealthChanged", "PlayerDowned",
-	-- Server -> Client notifications (Scoring)
 	"ScorePresented",
-	-- Server -> Client notifications (Progression)
 	"PlayerDataLoaded", "LevelUp", "RankUp", "XPAwarded",
 	"TitleUnlocked", "BadgeUnlocked",
-	-- Server -> Client notifications (Syndicate)
 	"QueueJoined", "QueueLeft", "MatchFound",
 	"SetupPhaseStarted", "WaitingForSetup", "DetectivePhaseStarted",
 	"MatchEnded", "SuspectExposed", "TeamMateExposed",
+	"OpenCaseBoard",
 }
 
 for _, name in ALL_REMOTES do
@@ -61,35 +37,178 @@ for _, name in ALL_REMOTES do
 	end
 end
 
--- Helper to fetch an already-created remote
+print("[Server] RemoteEvents created")
+
+------------------------------------------------------------------------
+-- STEP 2: LOAD SHARED MODULES
+------------------------------------------------------------------------
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(Shared:WaitForChild("Types"))
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+
+print("[Server] Shared modules loaded")
+
+------------------------------------------------------------------------
+-- STEP 3: LOAD SERVER MODULES (with error reporting)
+------------------------------------------------------------------------
+local function safeRequire(moduleScript: ModuleScript): any
+	local success, result = pcall(require, moduleScript)
+	if not success then
+		warn("[Server] Failed to load", moduleScript.Name, ":", result)
+		return nil
+	end
+	return result
+end
+
+local CaseManager = safeRequire(script.CaseManager)
+local EvidenceSystem = safeRequire(script.EvidenceSystem)
+local RaidController = safeRequire(script.RaidController)
+local NPCBehavior = safeRequire(script.NPCBehavior)
+local CombatSystem = safeRequire(script.CombatSystem)
+local ScoringSystem = safeRequire(script.ScoringSystem)
+local ProgressionSystem = safeRequire(script.ProgressionSystem)
+local SyndicateMatch = safeRequire(script.SyndicateMatch)
+local AntiExploit = safeRequire(script.AntiExploit)
+local LayoutBuilder = safeRequire(script.LayoutBuilder)
+local PrecinctBuilder = safeRequire(script.PrecinctBuilder)
+
+print("[Server] Server modules loaded")
+
+------------------------------------------------------------------------
+-- STEP 4: BUILD PRECINCT
+------------------------------------------------------------------------
+local precinctModel: Model? = nil
+local caseBoardPart: Part? = nil
+local PRECINCT_SPAWN = Vector3.new(0, 5, -15)
+local CASE_BUILDING_OFFSET = Vector3.new(200, 0, 0) -- Cases spawn far from precinct
+
+if PrecinctBuilder then
+	precinctModel, caseBoardPart = PrecinctBuilder.build()
+	print("[Server] Precinct built")
+
+	-- Wire up the ProximityPrompt on the case board
+	if caseBoardPart then
+		local prompt = caseBoardPart:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then
+			prompt.Triggered:Connect(function(player: Player)
+				local remote = ReplicatedStorage:FindFirstChild("OpenCaseBoard") :: RemoteEvent
+				if remote then
+					remote:FireClient(player)
+				end
+			end)
+		end
+	end
+else
+	-- Fallback: create a basic spawn platform
+	local platform = Instance.new("SpawnLocation")
+	platform.Size = Vector3.new(20, 1, 20)
+	platform.Position = Vector3.new(0, 0, 0)
+	platform.Anchored = true
+	platform.Material = Enum.Material.Concrete
+	platform.Color = Color3.fromRGB(100, 100, 100)
+	platform.Parent = workspace
+	warn("[Server] PrecinctBuilder failed, using fallback spawn")
+end
+
+------------------------------------------------------------------------
+-- HELPERS
+------------------------------------------------------------------------
 local function getRemote(name: string): RemoteEvent
 	return ReplicatedStorage:FindFirstChild(name) :: RemoteEvent
+end
+
+local function teleportPlayer(player: Player, position: Vector3)
+	local character = player.Character
+	if character then
+		local rootPart = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if rootPart then
+			rootPart.CFrame = CFrame.new(position)
+		end
+	end
 end
 
 ------------------------------------------------------------------------
 -- PLAYER JOIN / LEAVE
 ------------------------------------------------------------------------
 Players.PlayerAdded:Connect(function(player: Player)
-	ProgressionSystem.loadPlayer(player)
-	EvidenceSystem.initForPlayer(player)
+	if ProgressionSystem then
+		ProgressionSystem.loadPlayer(player)
+	end
+	if EvidenceSystem then
+		EvidenceSystem.initForPlayer(player)
+	end
 	print("[Server] Player joined:", player.Name)
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
-	CaseManager.onPlayerRemoving(player)
-	EvidenceSystem.cleanup(player)
-	RaidController.cleanup(player)
-	CombatSystem.cleanup(player)
-	ProgressionSystem.cleanup(player)
-	SyndicateMatch.onPlayerRemoving(player)
-	AntiExploit.cleanup(player)
+	if CaseManager then CaseManager.onPlayerRemoving(player) end
+	if EvidenceSystem then EvidenceSystem.cleanup(player) end
+	if RaidController then RaidController.cleanup(player) end
+	if CombatSystem then CombatSystem.cleanup(player) end
+	if ProgressionSystem then ProgressionSystem.cleanup(player) end
+	if SyndicateMatch then SyndicateMatch.onPlayerRemoving(player) end
+	if AntiExploit then AntiExploit.cleanup(player) end
 end)
+
+------------------------------------------------------------------------
+-- RAID COMPLETION (server-driven callback)
+------------------------------------------------------------------------
+local function onRaidComplete(player: Player)
+	if not RaidController or not CaseManager or not ScoringSystem then
+		return
+	end
+
+	local raid = RaidController.getActiveRaid(player)
+	local activeCase = CaseManager.getActiveCase(player)
+	if not raid or not activeCase then
+		return
+	end
+
+	local intel = if EvidenceSystem then EvidenceSystem.getPlayerIntel(player) else nil
+	local evidencePoints = if intel then intel.points else 0
+
+	CaseManager.setState(player, "Scoring")
+
+	local metrics = RaidController.endRaid(player)
+	if not metrics then
+		return
+	end
+
+	local result = ScoringSystem.calculateScore(
+		activeCase.caseData,
+		raid.intelTier,
+		evidencePoints,
+		metrics
+	)
+
+	ScoringSystem.presentScore(player, result)
+
+	if ProgressionSystem then
+		ProgressionSystem.awardXP(player, result.totalXP)
+		ProgressionSystem.recordCaseCompletion(player, activeCase.caseData.caseId, result.totalXP)
+	end
+
+	task.spawn(function()
+		task.wait(5)
+		CaseManager.completeCase(player, result.totalXP)
+
+		if EvidenceSystem then
+			EvidenceSystem.cleanup(player)
+			EvidenceSystem.cleanupCase(activeCase.caseData.caseId)
+		end
+		if RaidController then RaidController.cleanup(player) end
+		if NPCBehavior then NPCBehavior.cleanup() end
+
+		-- Teleport player back to precinct
+		teleportPlayer(player, PRECINCT_SPAWN)
+	end)
+end
 
 ------------------------------------------------------------------------
 -- CASE SELECTION
 ------------------------------------------------------------------------
 getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: unknown)
-	if typeof(caseId) ~= "string" then
+	if typeof(caseId) ~= "string" or not CaseManager then
 		return
 	end
 
@@ -106,14 +225,16 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 	local config = require(configModule) :: any
 	local caseData = config.getData()
 
-	if not ProgressionSystem.isCaseAvailable(player, caseData.difficulty) then
+	if ProgressionSystem and not ProgressionSystem.isCaseAvailable(player, caseData.difficulty) then
 		return
 	end
 
-	-- Build layout programmatically if case provides layout data
+	-- Build layout programmatically
 	local layoutModel: Model? = nil
-	if config.getLayout then
+	if LayoutBuilder and config.getLayout then
 		local layoutDef = config.getLayout()
+		-- Offset so building doesn't overlap precinct
+		layoutDef.origin = CASE_BUILDING_OFFSET
 		layoutModel = LayoutBuilder.build(layoutDef)
 		layoutModel.Parent = workspace
 	end
@@ -127,25 +248,36 @@ getRemote("RequestCase").OnServerEvent:Connect(function(player: Player, caseId: 
 		return
 	end
 
-	-- Initialize evidence for this case
-	local evidenceModule = caseFolder:FindFirstChild("EvidenceMap")
-	if evidenceModule and evidenceModule:IsA("ModuleScript") then
-		local evMod = require(evidenceModule) :: any
-		if evMod.getEvidence then
-			EvidenceSystem.loadEvidence(caseId :: string, evMod.getEvidence())
+	-- Initialize evidence
+	if EvidenceSystem then
+		local evidenceModule = caseFolder:FindFirstChild("EvidenceMap")
+		if evidenceModule and evidenceModule:IsA("ModuleScript") then
+			local evMod = require(evidenceModule) :: any
+			if evMod.getEvidence then
+				EvidenceSystem.loadEvidence(caseId :: string, evMod.getEvidence())
+			end
 		end
 	end
 
-	-- Initialize combat state
-	local armorBonus = if ProgressionSystem.getPlayerLevel(player) >= 50 then 15 else 0
-	CombatSystem.initPlayer(player, armorBonus)
+	-- Initialize combat
+	if CombatSystem then
+		local armorBonus = if ProgressionSystem and ProgressionSystem.getPlayerLevel(player) >= 50 then 15 else 0
+		CombatSystem.initPlayer(player, armorBonus)
+	end
+
+	-- Teleport player to case building
+	teleportPlayer(player, CASE_BUILDING_OFFSET + Vector3.new(0, 5, -20))
 end)
 
 ------------------------------------------------------------------------
 -- BREACH
 ------------------------------------------------------------------------
 getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit.checkRateLimit(player, "breach") then
+	if not AntiExploit or not AntiExploit.checkRateLimit(player, "breach") then
+		return
+	end
+
+	if not CaseManager or not EvidenceSystem or not RaidController then
 		return
 	end
 
@@ -161,7 +293,6 @@ getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
 
 	CaseManager.setState(player, "Raiding")
 
-	-- Load NPC configs from case
 	local caseFolder = CaseManager.getCaseFolder(activeCase.caseData.caseId)
 	local npcConfigs: { Types.NPCSuspect } = {}
 	if caseFolder then
@@ -174,14 +305,22 @@ getRemote("RequestBreach").OnServerEvent:Connect(function(player: Player)
 		end
 	end
 
-	-- Start raid with onComplete callback
+	-- Offset NPC positions to match case building location
+	for _, npc in npcConfigs do
+		npc.position = npc.position + CASE_BUILDING_OFFSET
+		if npc.fleeRoute then
+			for i, point in npc.fleeRoute do
+				npc.fleeRoute[i] = point + CASE_BUILDING_OFFSET
+			end
+		end
+	end
+
 	RaidController.startRaid(player, activeCase.caseData.caseId, intelTier, npcConfigs, function()
 		onRaidComplete(player)
 	end)
 
-	-- Spawn NPCs
 	local raid = RaidController.getActiveRaid(player)
-	if raid then
+	if raid and NPCBehavior then
 		for _, activeNPC in raid.npcs do
 			local npcInstance = NPCBehavior.spawnNPC(activeNPC.config, activeNPC.assignedBehavior)
 			activeNPC.model = npcInstance.model
@@ -193,7 +332,11 @@ end)
 -- EVIDENCE INTERACTION
 ------------------------------------------------------------------------
 getRemote("RequestInteract").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit.checkRateLimit(player, "interact") then
+	if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then
+		return
+	end
+
+	if not CaseManager or not EvidenceSystem then
 		return
 	end
 
@@ -240,7 +383,7 @@ getRemote("RequestFireWeapon").OnServerEvent:Connect(function(player: Player, or
 		return
 	end
 
-	if not AntiExploit.checkRateLimit(player, "fireWeapon") then
+	if not AntiExploit or not AntiExploit.checkRateLimit(player, "fireWeapon") then
 		return
 	end
 
@@ -248,10 +391,14 @@ getRemote("RequestFireWeapon").OnServerEvent:Connect(function(player: Player, or
 		return
 	end
 
+	if not CombatSystem or not RaidController then
+		return
+	end
+
 	local result = CombatSystem.fireWeapon(player, origin :: Vector3, direction :: Vector3)
 	RaidController.recordShot(player)
 
-	if result.hit and result.isNPC and result.target then
+	if result.hit and result.isNPC and result.target and NPCBehavior then
 		local didHit, isDowned = NPCBehavior.damageNPC(result.target, result.damage)
 		if isDowned then
 			RaidController.recordTakedown(player, result.target, result.isNonLethal)
@@ -271,18 +418,24 @@ getRemote("RequestWeaponSwitch").OnServerEvent:Connect(function(player: Player, 
 		return
 	end
 
-	if not ProgressionSystem.isToolUnlocked(player, weapon :: string) then
+	if ProgressionSystem and not ProgressionSystem.isToolUnlocked(player, weapon :: string) then
 		return
 	end
 
-	CombatSystem.equipWeapon(player, weapon :: any)
+	if CombatSystem then
+		CombatSystem.equipWeapon(player, weapon :: any)
+	end
 end)
 
 ------------------------------------------------------------------------
 -- ARREST
 ------------------------------------------------------------------------
 getRemote("RequestArrest").OnServerEvent:Connect(function(player: Player)
-	if not AntiExploit.checkRateLimit(player, "interact") then
+	if not AntiExploit or not AntiExploit.checkRateLimit(player, "interact") then
+		return
+	end
+
+	if not NPCBehavior or not RaidController then
 		return
 	end
 
@@ -311,60 +464,16 @@ end)
 -- MEDKIT
 ------------------------------------------------------------------------
 getRemote("RequestMedkit").OnServerEvent:Connect(function(player: Player)
-	CombatSystem.healPlayer(player)
+	if CombatSystem then
+		CombatSystem.healPlayer(player)
+	end
 end)
-
-------------------------------------------------------------------------
--- RAID COMPLETION -> SCORING (server-driven, no client event needed)
-------------------------------------------------------------------------
-function onRaidComplete(player: Player)
-	local raid = RaidController.getActiveRaid(player)
-	local activeCase = CaseManager.getActiveCase(player)
-	if not raid or not activeCase then
-		return
-	end
-
-	local intel = EvidenceSystem.getPlayerIntel(player)
-	local evidencePoints = if intel then intel.points else 0
-
-	CaseManager.setState(player, "Scoring")
-
-	local metrics = RaidController.endRaid(player)
-	if not metrics then
-		return
-	end
-
-	local result = ScoringSystem.calculateScore(
-		activeCase.caseData,
-		raid.intelTier,
-		evidencePoints,
-		metrics
-	)
-
-	ScoringSystem.presentScore(player, result)
-
-	-- Award XP
-	local newLevel, didLevelUp, newRank = ProgressionSystem.awardXP(player, result.totalXP)
-	ProgressionSystem.recordCaseCompletion(player, activeCase.caseData.caseId, result.totalXP)
-
-	-- Let player see score screen, then complete
-	task.spawn(function()
-		task.wait(5)
-		CaseManager.completeCase(player, result.totalXP)
-
-		-- Cleanup
-		EvidenceSystem.cleanup(player)
-		EvidenceSystem.cleanupCase(activeCase.caseData.caseId)
-		RaidController.cleanup(player)
-		NPCBehavior.cleanup()
-	end)
-end
 
 ------------------------------------------------------------------------
 -- SYNDICATE MODE
 ------------------------------------------------------------------------
 getRemote("JoinSyndicateQueue").OnServerEvent:Connect(function(player: Player, preference: unknown)
-	if typeof(preference) ~= "string" then
+	if typeof(preference) ~= "string" or not SyndicateMatch then
 		return
 	end
 	local validPrefs = { Detective = true, Syndicate = true, NoPreference = true }
@@ -375,10 +484,16 @@ getRemote("JoinSyndicateQueue").OnServerEvent:Connect(function(player: Player, p
 end)
 
 getRemote("LeaveSyndicateQueue").OnServerEvent:Connect(function(player: Player)
-	SyndicateMatch.leaveQueue(player)
+	if SyndicateMatch then
+		SyndicateMatch.leaveQueue(player)
+	end
 end)
 
 getRemote("RequestIdentify").OnServerEvent:Connect(function(player: Player)
+	if not SyndicateMatch then
+		return
+	end
+
 	local character = player.Character
 	if not character then
 		return

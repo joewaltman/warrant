@@ -196,26 +196,32 @@ function IntelMeterHUD.init()
 	createHUD()
 
 	-- Listen for server events
-	local intelUpdated = ReplicatedStorage:WaitForChild("IntelUpdated") :: RemoteEvent
-	intelUpdated.OnClientEvent:Connect(function(data: any)
-		currentPoints = data.points
-		currentTier = data.tier
-		updateDisplay()
-		showNotification("Evidence found: " .. data.evidenceName .. " (+" .. data.pointValue .. ")")
-	end)
+	local intelUpdated = ReplicatedStorage:WaitForChild("IntelUpdated", 10) :: RemoteEvent?
+	if intelUpdated then
+		intelUpdated.OnClientEvent:Connect(function(data: any)
+			currentPoints = data.points
+			currentTier = data.tier
+			updateDisplay()
+			showNotification("Evidence found: " .. data.evidenceName .. " (+" .. data.pointValue .. ")")
+		end)
+	end
 
-	local tierChanged = ReplicatedStorage:WaitForChild("IntelTierChanged") :: RemoteEvent
-	tierChanged.OnClientEvent:Connect(function(data: any)
-		currentTier = data.newTier
-		updateDisplay()
-		showNotification("Intel Tier: " .. data.tierName)
-	end)
+	local tierChanged = ReplicatedStorage:WaitForChild("IntelTierChanged", 10) :: RemoteEvent?
+	if tierChanged then
+		tierChanged.OnClientEvent:Connect(function(data: any)
+			currentTier = data.newTier
+			updateDisplay()
+			showNotification("Intel Tier: " .. data.tierName)
+		end)
+	end
 
-	local breachInitiated = ReplicatedStorage:WaitForChild("BreachInitiated") :: RemoteEvent
-	breachInitiated.OnClientEvent:Connect(function(data: any)
-		isFrozen = true
-		updateDisplay()
-	end)
+	local breachInitiated = ReplicatedStorage:WaitForChild("BreachInitiated", 10) :: RemoteEvent?
+	if breachInitiated then
+		breachInitiated.OnClientEvent:Connect(function(data: any)
+			isFrozen = true
+			updateDisplay()
+		end)
+	end
 end
 
 function IntelMeterHUD.show()

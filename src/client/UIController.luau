@@ -18,12 +18,6 @@ local UIController = {}
 local currentScreen: UIScreen = "Precinct"
 local screenModules: { [UIScreen]: any } = {}
 
-local remotes: { [string]: RemoteEvent } = {}
-
-local function getRemote(name: string): RemoteEvent
-	return ReplicatedStorage:WaitForChild(name) :: RemoteEvent
-end
-
 function UIController.registerScreen(screen: UIScreen, module: any)
 	screenModules[screen] = module
 end
